@@ -7,9 +7,6 @@ psycopg2-binary==2.9.9
 dj-database-url==2.1.0
 
 # GeoDjango dependencies
-GDAL==3.8.2
-Fiona==1.9.5
-Shapely==2.0.2
 
 # REST Framework
 djangorestframework==3.14.0

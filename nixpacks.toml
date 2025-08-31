@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ['python312', 'python312Packages.pip', 'gdal', 'geos', 'proj', 'postgresql']
+nixPkgs = ['python312', 'python312Packages.pip', 'postgresql']
 
 [phases.install]
 # Ensure pip exists in the environment, then install
