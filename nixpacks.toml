@@ -1,8 +1,13 @@
 [phases.setup]
-nixPkgs = ['python310', 'gdal', 'geos', 'proj', 'postgresql']
+nixPkgs = ['python310', 'python310Packages.pip', 'gdal', 'geos', 'proj', 'postgresql']
 
 [phases.install]
-cmds = ['python -m pip install -r requirements.txt']
+# Ensure pip exists in the environment, then install
+cmds = [
+  'python -m ensurepip --upgrade || true',
+  'python -m pip install --upgrade pip setuptools wheel',
+  'python -m pip install -r requirements.txt'
+]
 
 [phases.build]
 cmds = ['python manage.py collectstatic --noinput --settings=ankavidange.settings_production']
