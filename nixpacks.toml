@@ -4,13 +4,13 @@ nixPkgs = ['python313', 'python313Packages.pip', 'gdal', 'geos', 'proj', 'postgr
 [phases.install]
 # Ensure pip exists in the environment, then install
 cmds = [
-  'python -m ensurepip --upgrade || true',
-  'python -m pip install --upgrade pip setuptools wheel',
-  'python -m pip install -r requirements.txt'
+  'python3.13 -m ensurepip --upgrade || true',
+  'python3.13 -m pip install --upgrade pip setuptools wheel',
+  'python3.13 -m pip install -r requirements.txt'
 ]
 
 [phases.build]
-cmds = ['python manage.py collectstatic --noinput --settings=ankavidange.settings_production']
+cmds = ['python3.13 manage.py collectstatic --noinput --settings=ankavidange.settings_production']
 
 [start]
-cmd = 'python manage.py migrate --settings=ankavidange.settings_production && gunicorn --bind 0.0.0.0:$PORT ankavidange.wsgi:application'
+cmd = 'python3.13 manage.py migrate --settings=ankavidange.settings_production && gunicorn --bind 0.0.0.0:$PORT ankavidange.wsgi:application'
