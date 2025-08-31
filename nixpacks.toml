@@ -2,7 +2,7 @@
 nixPkgs = ['python310', 'gdal', 'geos', 'proj', 'postgresql']
 
 [phases.install]
-cmds = ['pip install -r requirements.txt']
+cmds = ['python -m pip install -r requirements.txt']
 
 [phases.build]
 cmds = ['python manage.py collectstatic --noinput --settings=ankavidange.settings_production']
