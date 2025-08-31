@@ -1,0 +1,465 @@
+{% extends 'user/base.html' %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+    /* Styles de la carte */
+    #truckMap {
+        height: 500px;
+        width: 100%;
+        border-radius: 10px;
+        box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    }
+
+    .leaflet-container {
+        height: 100%;
+        width: 100%;
+    }
+    
+    /* Style des cartes de statistiques */
+    .stat-card {
+        border-radius: 10px;
+        transition: transform 0.3s;
+        margin-bottom: 20px;
+        border: none;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        padding: 20px;
+        text-align: center;
+    }
+    
+    .stat-card i {
+        font-size: 2.5rem;
+        margin-bottom: 15px;
+        color: #0d6efd;
+    }
+    
+    .stat-card h3 {
+        font-size: 1.8rem;
+        font-weight: bold;
+        margin: 10px 0;
+    }
+    
+    .stat-card p {
+        color: #6c757d;
+        margin: 0;
+    }
+    
+    /* Style des boutons d'action */
+    .action-buttons {
+        margin: 30px 0;
+    }
+    
+    .action-buttons .btn {
+        margin: 5px;
+        min-width: 200px;
+        font-weight: 500;
+    }
+    
+    /* Style pour la section des demandes récentes */
+    .recent-requests {
+        margin-top: 40px;
+    }
+    
+    /* Légende de la carte */
+    .map-legend {
+        background: white;
+        padding: 10px 15px;
+        border-radius: 5px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+    }
+    
+    .legend-item {
+        display: flex;
+        align-items: center;
+        margin: 5px 0;
+    }
+    
+    .legend-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        margin-right: 8px;
+    }
+    
+    /* Style du modal */
+    .modal-content {
+        border: none;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 5px 25px rgba(0,0,0,0.2);
+    }
+    
+    .modal-header {
+        background-color: #FF9F00;
+        color: white;
+        border-bottom: none;
+        padding: 1.25rem 1.5rem;
+    }
+    
+    .modal-title {
+        font-weight: 600;
+        font-size: 1.25rem;
+    }
+    
+    .btn-close {
+        filter: invert(1) grayscale(100%) brightness(200%);
+        opacity: 0.8;
+        transition: opacity 0.2s;
+    }
+    
+    .btn-close:hover {
+        opacity: 1;
+    }
+    
+    .modal-body {
+        padding: 1.5rem;
+    }
+    
+    .modal-footer {
+        background-color: #f8f9fa;
+        border-top: 1px solid #eee;
+        padding: 1rem 1.5rem;
+    }
+    
+    .btn-primary {
+        background-color: #FF9F00;
+        border-color: #FF9F00;
+        font-weight: 500;
+        padding: 0.5rem 1.5rem;
+    }
+    
+    .btn-primary:hover, .btn-primary:focus {
+        background-color: #e68a00;
+        border-color: #e68a00;
+        box-shadow: 0 0 0 0.25rem rgba(255, 159, 0, 0.25);
+    }
+    
+    .btn-secondary {
+        background-color: #6c757d;
+        border-color: #6c757d;
+        font-weight: 500;
+        padding: 0.5rem 1.5rem;
+    }
+    
+    .form-control:focus, .form-select:focus {
+        border-color: #FF9F00;
+        box-shadow: 0 0 0 0.25rem rgba(255, 159, 0, 0.15);
+    }
+    
+    .form-range::-webkit-slider-thumb {
+        background: #FF9F00;
+        width: 1.25rem;
+        height: 1.25rem;
+        margin-top: -0.5rem;
+    }
+    
+    .form-range::-moz-range-thumb {
+        background: #FF9F00;
+        width: 1.25rem;
+        height: 1.25rem;
+        border: none;
+    }
+    
+    .form-range:focus::-webkit-slider-thumb {
+        box-shadow: 0 0 0 1px #fff, 0 0 0 0.25rem rgba(255, 159, 0, 0.25);
+    }
+    
+    .form-range:focus::-moz-range-thumb {
+        box-shadow: 0 0 0 1px #fff, 0 0 0 0.25rem rgba(255, 159, 0, 0.25);
+    }
+    
+    .form-label {
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+        color: #495057;
+    }
+    
+    /* Style pour les badges de statut */
+    .badge {
+        padding: 0.5em 0.8em;
+        font-weight: 500;
+        letter-spacing: 0.5px;
+    }
+
+    /* Style pour le tableau */
+    #historiqueTable {
+        font-size: 0.9rem;
+    }
+
+    #historiqueTable th {
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.8rem;
+        color: #6c757d;
+        border-bottom-width: 2px;
+    }
+
+    #historiqueTable td {
+        vertical-align: middle;
+    }
+
+    /* Style pour les lignes du tableau */
+    #historiqueTable tbody tr {
+        transition: background-color 0.2s;
+    }
+
+    #historiqueTable tbody tr:hover {
+        background-color: rgba(255, 159, 0, 0.05);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête avec titre et bouton d'action principal -->
+    <div class="d-flex justify-content-between flex-wrap align-items-center pt-4 pb-3 mb-4 border-bottom">
+        <h1 class="h2">Bienvenue!</h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <button type="button" class="btn btn-outline-warning text-warning" style="background-color: white; border-color: #FF9F00;" data-bs-toggle="modal" data-bs-target="#newRequestModal">
+                <i class="fas fa-plus-circle me-2"></i>Nouvelle demande
+            </button>  
+            &nbsp;
+        </div>
+    </div>
+
+    <!-- Carte des camions -->
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h4 class="card-title">Carte des vidangeurs disponibles</h4>
+                        <div style="height: 500px;" id="truckMap"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bouton pour ouvrir le modal d'historique -->
+    <div class="text-center mt-4">
+        <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#historiqueModal">
+            <i class="fas fa-history me-2"></i>Voir mon historique
+        </button>
+    </div>
+</div>
+
+<!-- Modal Nouvelle Demande -->
+<div class="modal fade" id="newRequestModal" tabindex="-1" aria-labelledby="newRequestModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="newRequestModalLabel">Nouvelle demande de vidangeur</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" action=""> 
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="container-fluid">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <div class="mb-3">
+                                    <label for="adresse" class="form-label">Adresse *</label>
+                                    <input type="text" class="form-control" id="adresse" name="adresse" required>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="mb-3">
+                                    <label for="type_vidange" class="form-label">Type de vidange *</label>
+                                    <select class="form-select" id="type_vidange" name="type_vidange" required>
+                                        <option value="">Sélectionnez un type</option>
+                                        <option value="MECANIQUE">Mécanique</option>
+                                        <option value="MANUELLE">Manuelle</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="montant_propose" class="form-label">Budget: <span id="montantValue">45 000</span> FCFA</label>
+                                    <div class="d-flex align-items-center">
+                                        <span class="me-2" style="min-width: 50px;">30k</span>
+                                        <input type="range" class="form-range" id="montant_propose" 
+                                               name="montant_propose" min="30000" max="60000" step="5000" 
+                                               value="45000" oninput="updateMontantValue(this.value)">
+                                        <span class="ms-2" style="min-width: 50px;">60k</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="mb-3">
+                                    <label for="date_souhaitee" class="form-label">Date souhaitée</label>
+                                    <input type="datetime-local" class="form-control" id="date_souhaitee" 
+                                           name="date_souhaitee">
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="mb-3">
+                                    <label for="description" class="form-label">Description (optionnel)</label>
+                                    <textarea class="form-control" id="description" name="description" rows="2"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-warning text-warning" style="background-color: white; border-color: #FF9F00;" data-bs-toggle="modal" data-bs-target="#newRequestModal">
+                        <i class="fas fa-cancel me-2"></i>Annuler
+                    </button>
+                    <button type="button" class="btn btn-outline-warning text-warning" style="background-color: white; border-color: #FF9F00;" data-bs-toggle="modal" data-bs-target="#newRequestModal">
+                        <i class="fas fa-check me-2"></i>Rechercher
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Historique des Demandes -->
+<div class="modal fade" id="historiqueModal" tabindex="-1" aria-labelledby="historiqueModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content" style="border: 1px solid #FF9F00; border-radius: 10px; overflow: hidden;">
+            <div class="modal-header" style="background-color: #FF9F00; color: white; border-bottom: none;">
+                <h5 class="modal-title" id="historiqueModalLabel">
+                    <i class="fas fa-history me-2"></i>Historique de mes demandes
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer" style="filter: brightness(0) invert(1);"></button>
+            </div>
+            <div class="modal-body" style="padding: 1.5rem;">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="historiqueTable">
+                        <thead>
+                            <tr style="background-color: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                                <th style="padding: 0.75rem; font-weight: 600; text-transform: uppercase; font-size: 0.8rem; color: #6c757d;">
+                                    <i class="fas fa-hashtag me-1"></i>Référence
+                                </th>
+                                <th style="padding: 0.75rem; font-weight: 600; text-transform: uppercase; font-size: 0.8rem; color: #6c757d;">
+                                    <i class="far fa-calendar-alt me-1"></i>Date
+                                </th>
+                                <th style="padding: 0.75rem; font-weight: 600; text-transform: uppercase; font-size: 0.8rem; color: #6c757d;">
+                                    <i class="fas fa-tags me-1"></i>Type
+                                </th>
+                                <th style="padding: 0.75rem; font-weight: 600; text-transform: uppercase; font-size: 0.8rem; color: #6c757d;">
+                                    <i class="fas fa-money-bill-wave me-1"></i>Montant (FCFA)
+                                </th>
+                                <th style="padding: 0.75rem; font-weight: 600; text-transform: uppercase; font-size: 0.8rem; color: #6c757d;">
+                                    <i class="fas fa-info-circle me-1"></i>Statut
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="historiqueTableBody" style="border-top: none;">
+                            <tr>
+                                <td colspan="6" class="text-center py-4">
+                                    <div class="spinner-border text-warning" role="status">
+                                        <span class="visually-hidden">Chargement...</span>
+                                    </div>
+                                    <p class="mt-2 mb-0">Chargement de l'historique...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer" style="background-color: #f8f9fa; border-top: 1px solid #dee2e6; padding: 1rem 1.5rem;">
+                <button type="button" class="btn btn-outline-warning text-warning" style="background-color: white; border-color: #FF9F00;" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>Fermer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  // Initialize map
+  var map = L.map('truckMap').setView([12.6392, -8.0024], 13);
+
+// Add OpenStreetMap tiles
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>',
+    subdomains: ['a', 'b', 'c']
+}).addTo(map);
+</script>
+
+<script>
+function updateMontantValue(value) {
+    const formattedValue = parseInt(value).toLocaleString('fr-FR');
+    document.getElementById('montantValue').textContent = formattedValue;
+}
+
+function updateCapaciteValue(value) {
+    document.getElementById('capaciteValue').textContent = value;
+}
+
+// Initialiser les valeurs au chargement de la page
+document.addEventListener('DOMContentLoaded', function() {
+    updateMontantValue(document.getElementById('montant_propose').value);
+    updateCapaciteValue(document.getElementById('capacite_demandee').value);
+});
+
+// Charger l'historique quand le modal s'ouvre
+document.getElementById('historiqueModal').addEventListener('shown.bs.modal', async function() {
+    try {
+        const response = await fetch('/api/demandes/');
+        const demandes = await response.json();
+        const tbody = document.getElementById('historiqueTableBody');
+        
+        if (demandes.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center">Aucune demande trouvée</td>
+                </tr>`;
+            } else {
+                tbody.innerHTML = demandes.map(demande => `
+                    <tr>
+                        <td>${demande.id}</td>
+                        <td>${new Date(demande.created_at).toLocaleDateString('fr-FR')}</td>
+                        <td>${demande.type_vidange || '-'}</td>
+                        <td>${demande.montant_propose ? new Intl.NumberFormat('fr-FR').format(demande.montant_propose) : '-'}</td>
+                        <td><span class="badge bg-${getStatusBadgeClass(demande.statut)}">${getStatusText(demande.statut)}</span></td>
+                    </tr>`
+                ).join('');
+            }
+    } catch (error) {
+        console.error('Erreur lors du chargement de l\'historique:', error);
+        document.getElementById('historiqueTableBody').innerHTML = `
+            <tr>
+                <td colspan="6" class="text-center text-danger">Erreur lors du chargement des données</td>
+            </tr>`;
+    }
+});
+
+function getStatusBadgeClass(statut) {
+    const classes = {
+        'EN_ATTENTE': 'warning',
+        'VALIDE': 'info',
+        'EN_COURS': 'primary',
+        'TERMINEE': 'success',
+        'ANNULEE': 'secondary'
+    };
+    return classes[statut] || 'secondary';
+}
+
+function getStatusText(statut) {
+    const textes = {
+        'EN_ATTENTE': 'En attente',
+        'VALIDE': 'Validée',
+        'EN_COURS': 'En cours',
+        'TERMINEE': 'Terminée',
+        'ANNULEE': 'Annulée'
+    };
+    return textes[statut] || statut;
+}
+</script>
+{% endblock %}

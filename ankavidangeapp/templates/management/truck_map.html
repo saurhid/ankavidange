@@ -1,0 +1,256 @@
+{% extends 'management/base.html' %}
+{% load static %}
+
+{% block title %}Carte des camions - {{ block.super }}{% endblock %}
+
+{% block page_title %}
+<div class="d-flex justify-content-between align-items-center">
+    <span>Carte des vidangeurs</span>
+    &nbsp;
+    <div>
+        <button id="refreshMap" class="btn btn-sm btn-primary">
+            <i class="fas fa-sync-alt me-1"></i> Actualiser
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div id="CamMap3" style="height: 425px; width: 100%;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Liste des vidangeurs</h6>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="trucksTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Type</th>
+                                <th>Immatriculation</th>
+                                <th>Modèle</th>
+                                <th>Statut</th>
+                                <th>Dernière position</th>
+                                <th>Dernière mise à jour</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for truck in trucks %}
+                            <tr data-truck-id="{{ truck.id }}">
+                                <td>#{{ truck.id }}</td>
+                                <td>
+                                    <span class="badge-status badge-status-{{ truck.type|default:'-'|lower|slugify }}">{{ truck.type|default:'-' }}</span>
+                                </td>
+                                <td>{% if truck.immatriculation %}{{ truck.immatriculation }}{% else %}-{% endif %}</td>
+                                <td>{{ truck.modele|default:"-" }}</td>
+                                <td>
+                                    <span class="badge-status badge-status-{{ truck.statut|lower|slugify }}">
+                                        {{ truck.statut }}
+                                    </span>
+                                </td>
+                                <td>{% if truck.latitude and truck.longitude %}
+                                    {{ truck.latitude|floatformat:6 }}, {{ truck.longitude|floatformat:6 }}
+                                    {% else %}-
+                                    {% endif %}
+                                </td>
+                                <td>{% if truck.last_update %}
+                                    <span class="time-ago" data-timestamp="{{ truck.last_update|date:'c' }}">
+                                        {{ truck.last_update|timesince }}
+                                    </span>
+                                    {% else %}-
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary btn-zoom-to" 
+                                            data-truck-id="{{ truck.id }}"
+                                            data-bs-toggle="tooltip" 
+                                            title="Centrer sur la carte">
+                                        <i class="fas fa-search-location"></i>
+                                    </button>
+                                    <a href="{% url 'management:request_followup' %}?truck={{ truck.id }}" 
+                                       class="btn btn-sm btn-outline-info"
+                                       data-bs-toggle="tooltip"
+                                       title="Voir les demandes">
+                                        <i class="fas fa-clipboard-list"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="8" class="text-center py-4">
+                                    <i class="fas fa-truck fa-3x text-gray-300 mb-3"></i>
+                                    <p class="text-muted">Aucun vidangeur enregistré</p>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/m5Z5SaKGqXSUtd5vw="
+      crossorigin=""/>
+<style>
+    #truckMap {
+        border-radius: 0.35rem 0.35rem 0 0;
+    }
+    .leaflet-popup-content { margin: 1rem; }
+    .truck-popup h5 { margin: 0 0 0.5rem 0; font-size: 1rem; font-weight: 600; }
+    .truck-popup p { margin: 0.25rem 0; font-size: 0.9rem; }
+    .truck-popup .status { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 0.25rem; font-size: 0.8rem; font-weight: 600; }
+
+    /* Map marker styles */
+    .map-marker { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.35); }
+    .map-marker.blue { background: #0d6efd; }
+    .map-marker.orange { background: #fd7e14; }
+    .map-marker.green { background: #198754; }
+    .map-marker i { font-size: 14px; line-height: 1; }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+{{ trucks|json_script:"trucks-data" }}
+{{ centres|json_script:"centres-data" }}
+
+<script>
+  // Initialize map
+  var map = L.map('CamMap3').setView([12.6392, -8.0024], 13);
+
+  // Add OpenStreetMap tiles
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>',
+      subdomains: ['a', 'b', 'c']
+  }).addTo(map);
+
+  const trucks = JSON.parse(document.getElementById('trucks-data').textContent);
+  const centres = JSON.parse(document.getElementById('centres-data')?.textContent || '[]');
+  const markersById = {};
+  const bounds = [];
+
+  function normalizeType(type) {
+    return (type || '')
+      .toString()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  }
+  function isMec(type) { return normalizeType(type).startsWith('mecanique'); }
+  function colorClass(type) { return isMec(type) ? 'blue' : 'orange'; }
+  function iconForType(type) {
+    const mec = isMec(type);
+    // Add FA5 fallback class for manual (fa-tools) alongside FA6 (fa-screwdriver-wrench)
+    const iconClass = mec ? 'fa-solid fa-truck' : 'fa-solid fa-screwdriver-wrench fa-tools';
+    const cc = colorClass(type);
+    return L.divIcon({
+      className: 'fa-marker',
+      html: `<div class="map-marker ${cc}"><i class="${iconClass}"></i></div>`,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+      popupAnchor: [0, -14]
+    });
+  }
+
+  function centreIcon() {
+    return L.divIcon({
+      className: 'fa-marker',
+      html: `<div class="map-marker green"><i class="fa-solid fa-industry"></i></div>`,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+      popupAnchor: [0, -14]
+    });
+  }
+
+  function formatTimeAgo(value) {
+    if (!value) return '-';
+    const d = (value instanceof Date) ? value : new Date(value);
+    if (isNaN(d.getTime())) return '-';
+    const now = new Date();
+    const diffSec = Math.floor((now - d) / 1000);
+    if (diffSec < 60) return `${diffSec}s`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin} min`;
+    const diffH = Math.floor(diffMin / 60);
+    if (diffH < 24) return `${diffH} h`;
+    const diffD = Math.floor(diffH / 24);
+    return `${diffD} j`;
+  }
+
+  // Plot truck markers
+  trucks.forEach(function(t) {
+    if (t.latitude && t.longitude) {
+      const marker = L.marker([t.latitude, t.longitude], { icon: iconForType(t.type) }).addTo(map);
+      const popupHtml = `
+        <div class="truck-popup">
+          <h5>#${t.id} — ${t.type || '-'}${t.immatriculation ? ' — ' + t.immatriculation : ''}</h5>
+          <p><strong>Statut:</strong> ${t.statut}</p>
+          <p><strong>Chauffeur:</strong> ${t.chauffeur || '-'}</p>
+          <p><strong>Coord:</strong> ${Number(t.latitude).toFixed(6)}, ${Number(t.longitude).toFixed(6)}</p>
+          <p><strong>MAJ:</strong> ${formatTimeAgo((t.last_update_ts ? (t.last_update_ts * 1000) : t.last_update_iso))}</p>
+        </div>`;
+      marker.bindPopup(popupHtml);
+      markersById[t.id] = marker;
+      bounds.push([t.latitude, t.longitude]);
+    }
+  });
+
+  // Plot centre markers
+  centres.forEach(function(c) {
+    if (c.latitude && c.longitude) {
+      const marker = L.marker([c.latitude, c.longitude], { icon: centreIcon() }).addTo(map);
+      const popupHtml = `
+        <div class="truck-popup">
+          <h5>Centre: ${c.name || '-'}</h5>
+          <p><strong>Coord:</strong> ${Number(c.latitude).toFixed(6)}, ${Number(c.longitude).toFixed(6)}</p>
+        </div>`;
+      marker.bindPopup(popupHtml);
+      bounds.push([c.latitude, c.longitude]);
+    }
+  });
+
+  if (bounds.length) { map.fitBounds(bounds, { padding: [30, 30] }); }
+
+  // Zoom-to actions
+  $(document).on('click', '.btn-zoom-to', function() {
+    const id = $(this).data('truck-id');
+    const m = markersById[id];
+    if (m) { map.setView(m.getLatLng(), 16, { animate: true }); m.openPopup(); }
+  });
+
+  // Optional: refresh button (simple reload for now)
+  $('#refreshMap').on('click', function() { window.location.reload(); });
+
+  // Auto-refresh relative times in the table using ISO in data-timestamp
+  function refreshTableTimes() {
+    document.querySelectorAll('.time-ago').forEach(function(el){
+      const iso = el.getAttribute('data-timestamp');
+      el.textContent = formatTimeAgo(iso);
+    });
+  }
+  refreshTableTimes();
+  setInterval(refreshTableTimes, 30000);
+</script>
+{% endblock %}

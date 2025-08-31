@@ -1,0 +1,412 @@
+{% extends 'proprietaire/base_proprietaire.html' %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+    /* Styles de la carte */
+    #truckMap {
+        height: 500px;
+        width: 100%;
+        border-radius: 10px;
+        box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    }
+
+    .leaflet-container {
+        height: 100%;
+        width: 100%;
+    }
+    
+    /* Style des cartes de statistiques */
+    .stat-card {
+        border-radius: 10px;
+        transition: transform 0.3s;
+        margin-bottom: 20px;
+        border: none;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        padding: 20px;
+        text-align: center;
+    }
+    
+    .stat-card i {
+        font-size: 2.5rem;
+        margin-bottom: 15px;
+        color: #0d6efd;
+    }
+    
+    .stat-card h3 {
+        font-size: 1.8rem;
+        font-weight: bold;
+        margin: 10px 0;
+    }
+    
+    .stat-card p {
+        color: #6c757d;
+        margin: 0;
+    }
+    
+    /* Style des boutons d'action */
+    .action-buttons {
+        margin: 30px 0;
+    }
+    
+    .action-buttons .btn {
+        margin: 5px;
+        min-width: 200px;
+        font-weight: 500;
+    }
+    
+    /* Style pour la section des demandes récentes */
+    .recent-requests {
+        margin-top: 40px;
+    }
+    
+    /* Légende de la carte */
+    .map-legend {
+        background: white;
+        padding: 10px 15px;
+        border-radius: 5px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+    }
+    
+    .legend-item {
+        display: flex;
+        align-items: center;
+        margin: 5px 0;
+    }
+    
+    .legend-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        margin-right: 8px;
+    }
+    
+    /* Style du modal */
+    .modal-content {
+        border: none;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 5px 25px rgba(0,0,0,0.2);
+    }
+    
+    .modal-header {
+        background-color: #FF9F00;
+        color: white;
+        border-bottom: none;
+        padding: 1.25rem 1.5rem;
+    }
+    
+    .modal-title {
+        font-weight: 600;
+        font-size: 1.25rem;
+    }
+    
+    .btn-close {
+        filter: invert(1) grayscale(100%) brightness(200%);
+        opacity: 0.8;
+        transition: opacity 0.2s;
+    }
+    
+    .btn-close:hover {
+        opacity: 1;
+    }
+    
+    .modal-body {
+        padding: 1.5rem;
+    }
+    
+    .modal-footer {
+        background-color: #f8f9fa;
+        border-top: 1px solid #eee;
+        padding: 1rem 1.5rem;
+    }
+    
+    .btn-primary {
+        background-color: #FF9F00;
+        border-color: #FF9F00;
+        font-weight: 500;
+        padding: 0.5rem 1.5rem;
+    }
+    
+    .btn-primary:hover, .btn-primary:focus {
+        background-color: #e68a00;
+        border-color: #e68a00;
+        box-shadow: 0 0 0 0.25rem rgba(255, 159, 0, 0.25);
+    }
+    
+    .btn-secondary {
+        background-color: #6c757d;
+        border-color: #6c757d;
+        font-weight: 500;
+        padding: 0.5rem 1.5rem;
+    }
+    
+    .form-control:focus, .form-select:focus {
+        border-color: #FF9F00;
+        box-shadow: 0 0 0 0.25rem rgba(255, 159, 0, 0.15);
+    }
+    
+    .form-range::-webkit-slider-thumb {
+        background: #FF9F00;
+        width: 1.25rem;
+        height: 1.25rem;
+        margin-top: -0.5rem;
+    }
+    
+    .form-range::-moz-range-thumb {
+        background: #FF9F00;
+        width: 1.25rem;
+        height: 1.25rem;
+        border: none;
+    }
+    
+    .form-range:focus::-webkit-slider-thumb {
+        box-shadow: 0 0 0 1px #fff, 0 0 0 0.25rem rgba(255, 159, 0, 0.25);
+    }
+    
+    .form-range:focus::-moz-range-thumb {
+        box-shadow: 0 0 0 1px #fff, 0 0 0 0.25rem rgba(255, 159, 0, 0.25);
+    }
+    
+    .form-label {
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+        color: #495057;
+    }
+    
+    /* Style pour les badges de statut */
+    .badge {
+        padding: 0.5em 0.8em;
+        font-weight: 500;
+        letter-spacing: 0.5px;
+    }
+
+    /* Style pour le tableau */
+    #historiqueTable {
+        font-size: 0.9rem;
+    }
+
+    #historiqueTable th {
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.8rem;
+        color: #6c757d;
+        border-bottom-width: 2px;
+    }
+
+    #historiqueTable td {
+        vertical-align: middle;
+    }
+
+    /* Style pour les lignes du tableau */
+    #historiqueTable tbody tr {
+        transition: background-color 0.2s;
+    }
+
+    #historiqueTable tbody tr:hover {
+        background-color: rgba(255, 159, 0, 0.05);
+    }
+</style>
+{% endblock %}
+{% block dashboard_content %}
+<div class="d-flex justify-content-between flex-wrap align-items-center pt-2 pb-3 mb-4 border-bottom">
+    <h1 class="h3 mb-0">Tableau de bord</h1>
+    <div class="btn-group">
+        <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+            <i class="fas fa-calendar-alt me-2"></i>Cette semaine
+        </button>
+        <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="#">Aujourd'hui</a></li>
+            <li><a class="dropdown-item active" href="#">Cette semaine</a></li>
+            <li><a class="dropdown-item" href="#">Ce mois</a></li>
+            <li><a class="dropdown-item" href="#">Cette année</a></li>
+        </ul>
+    </div>
+</div>
+
+    <!-- Cartes de statistiques -->
+    <div class="row g-4 mb-4">
+        <!-- Total Camions -->
+        <div class="col-xl-3 col-md-6">
+            <div class="card card-dashboard border-start-lg border-primary">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-uppercase text-muted mb-2">Total vidangeur</h6>
+                            <h2 class="mb-0">{{ total_vidangeur|default:"0" }} </h2>
+                        </div>
+                        <div class="bg-primary bg-opacity-10 p-3 rounded-3">
+                            <i class="fas fa-truck text-primary" style="font-size: 1.5rem;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Camions en service -->
+        <div class="col-xl-3 col-md-6">
+            <div class="card card-dashboard border-start-lg border-success">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-uppercase text-muted mb-2">En service</h6>
+                            <h2 class="mb-0">{{ camions_en_service|default:"0" }}</h2>
+                        </div>
+                        <div class="bg-success bg-opacity-10 p-3 rounded-3">
+                            <i class="fas fa-truck-loading text-success" style="font-size: 1.5rem;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Chauffeurs actifs -->
+        <div class="col-xl-3 col-md-6">
+            <div class="card card-dashboard border-start-lg border-info">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-uppercase text-muted mb-2">Hors service</h6>
+                            <h2 class="mb-0">{{ chauffeurs_hors_service|default:"0" }}</h2>
+                        </div>
+                        <div class="bg-info bg-opacity-10 p-3 rounded-3">
+                            <i class="fas fa-user-tie text-info" style="font-size: 1.5rem;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Revenus du mois -->
+        <div class="col-xl-3 col-md-6">
+            <div class="card card-dashboard border-start-lg border-warning">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-uppercase text-muted mb-2">Revenus (30j)</h6>
+                            <h2 class="mb-0">{{ revenus_mois|default:"0" }} <small>FCFA</small></h2>
+                        </div>
+                        <div class="bg-warning bg-opacity-10 p-3 rounded-3">
+                            <i class="fas fa-chart-line text-warning" style="font-size: 1.5rem;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dernières demandes et activité récente -->
+    <div class="row g-4">
+        <div class="col-lg-12">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Dernières demandes</h5>
+                    <a href="#" class="btn btn-sm btn-outline-primary">
+                        Voir tout <i class="fas fa-arrow-right ms-1"></i>
+                    </a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="bg-light">
+                                <tr>
+                                    <th class="ps-4">Client</th>
+                                    <th>Type</th>
+                                    <th>Date</th>
+                                    <th>Montant</th>
+                                    <th>Statut</th>
+                                    <th class="text-end pe-4">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for demande in dernieres_demandes %}
+                                <tr>
+                                    <td class="ps-4">
+                                        <div class="d-flex align-items-center">
+                                            <div class="flex-shrink-0 me-2">
+                                                <div class="avatar-sm bg-soft-primary rounded-circle text-primary d-flex align-items-center justify-content-center">
+                                                    <i class="fas fa-user"></i>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <h6 class="mb-0">{{ demande.usager.get_full_name|default:demande.usager.username }}</h6>
+                                                <small class="text-muted">{{ demande.reference }}</small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-soft-primary text-primary">
+                                            {{ demande.get_type_vidange_display }}
+                                        </span>
+                                    </td>
+                                    <td>{{ demande.date_creation|date:"d/m/Y H:i" }}</td>
+                                    <td>{{ demande.montant|default:"-" }} FCFA</td>
+                                    <td>
+                                        <span class="badge bg-{{ demande.get_statut_badge }} bg-opacity-10 text-{{ demande.get_statut_badge }} px-2 py-1">
+                                            <i class="fas fa-circle me-1" style="font-size: 0.5rem;"></i>
+                                            {{ demande.get_statut_display }}
+                                        </span>
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        <div class="dropdown">
+                                            <button class="btn btn-sm btn-link text-muted" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                                <i class="fas fa-ellipsis-v"></i>
+                                            </button>
+                                            <ul class="dropdown-menu dropdown-menu-end">
+                                                <li><a class="dropdown-item" href="#"><i class="far fa-eye me-2"></i>Voir détails</a></li>
+                                                <li><a class="dropdown-item" href="#"><i class="far fa-edit me-2"></i>Modifier</a></li>
+                                                <li><hr class="dropdown-divider"></li>
+                                                <li><a class="dropdown-item text-danger" href="#"><i class="far fa-trash-alt me-2"></i>Supprimer</a></li>
+                                            </ul>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="6" class="text-center py-4">
+                                        <div class="text-muted">
+                                            <i class="fas fa-inbox fa-2x mb-2"></i>
+                                            <p class="mb-0">Aucune demande récente</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-12">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div id="CamMap2" style="height: 425px; width: 100%;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  // Initialize map
+  var map = L.map('CamMap2').setView([12.6392, -8.0024], 13);
+
+// Add OpenStreetMap tiles
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>',
+    subdomains: ['a', 'b', 'c']
+}).addTo(map);
+</script>
+{% endblock %}

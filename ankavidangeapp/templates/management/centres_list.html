@@ -1,0 +1,150 @@
+{% extends 'management/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h1 class="h3 mb-0 text-gray-800">{{ title|default:'Centres de vidange' }}</h1>
+  <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createCentreModal" data-mode="create">
+    <i class="fas fa-plus me-1"></i> Nouveau centre
+  </button>
+</div>
+
+<div class="card shadow">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead>
+          <tr>
+            <th>Nom</th>
+            <th>Latitude</th>
+            <th>Longitude</th>
+            <th>Actif</th>
+            <th>Créé le</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in centres %}
+          <tr>
+            <td>{{ c.nom }}</td>
+            <td>{{ c.latitude|default:'—' }}</td>
+            <td>{{ c.longitude|default:'—' }}</td>
+            <td>
+              {% if c.actif %}
+                <span class="badge bg-success">Actif</span>
+              {% else %}
+                <span class="badge bg-secondary">Inactif</span>
+              {% endif %}
+            </td>
+            <td>{{ c.date_creation|date:'d/m/Y H:i' }}</td>
+            <td>
+              <button 
+                class="btn btn-sm btn-outline-primary"
+                data-bs-toggle="modal"
+                data-bs-target="#createCentreModal"
+                data-mode="edit"
+                data-id="{{ c.id }}"
+                data-nom="{{ c.nom|escape }}"
+                data-lat="{{ c.latitude }}"
+                data-lng="{{ c.longitude }}"
+                data-actif="{{ c.actif|yesno:'1,0' }}">
+                <i class="fas fa-pen"></i>
+              </button>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="5" class="text-center text-muted">Aucun centre enregistré.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Create Centre Modal -->
+<div class="modal fade" id="createCentreModal" tabindex="-1" aria-labelledby="createCentreLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="createCentreLabel">Créer un centre de vidange</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post" action="{% url 'management:centres_list' %}">
+        {% csrf_token %}
+        <div class="modal-body">
+          <input type="hidden" id="centre_id" name="centre_id">
+          <div class="mb-3">
+            <label for="nom" class="form-label">Nom du centre</label>
+            <input type="text" class="form-control" id="nom" name="nom" required>
+          </div>
+          <div class="row g-2">
+            <div class="col">
+              <label for="latitude" class="form-label">Latitude</label>
+              <input type="text" class="form-control" id="latitude" name="latitude" placeholder="ex: 6.1373">
+            </div>
+            <div class="col">
+              <label for="longitude" class="form-label">Longitude</label>
+              <input type="text" class="form-control" id="longitude" name="longitude" placeholder="ex: 1.2123">
+            </div>
+          </div>
+          <div class="form-check mt-3">
+            <input class="form-check-input" type="checkbox" value="on" id="actif" name="actif">
+            <label class="form-check-label" for="actif">Actif</label>
+          </div>
+          <div class="form-text mt-2">Les coordonnées sont optionnelles. Vous pourrez les définir plus tard.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-primary" id="submitBtn">Créer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function(){
+    const modalEl = document.getElementById('createCentreModal');
+    if (!modalEl) return;
+    modalEl.addEventListener('show.bs.modal', function (event) {
+      const button = event.relatedTarget;
+      const mode = button?.getAttribute('data-mode') || 'create';
+      const title = modalEl.querySelector('#createCentreLabel');
+      const submitBtn = modalEl.querySelector('#submitBtn');
+      const idInput = modalEl.querySelector('#centre_id');
+      const nomInput = modalEl.querySelector('#nom');
+      const latInput = modalEl.querySelector('#latitude');
+      const lngInput = modalEl.querySelector('#longitude');
+      const actifInput = modalEl.querySelector('#actif');
+
+      if (mode === 'edit') {
+        // Fill from data attributes
+        const id = button.getAttribute('data-id');
+        const nom = button.getAttribute('data-nom') || '';
+        const lat = button.getAttribute('data-lat') || '';
+        const lng = button.getAttribute('data-lng') || '';
+        const actif = (button.getAttribute('data-actif') === '1');
+        title.textContent = 'Modifier un centre de vidange';
+        submitBtn.textContent = 'Mettre à jour';
+        idInput.value = id;
+        nomInput.value = nom;
+        latInput.value = lat;
+        lngInput.value = lng;
+        actifInput.checked = actif;
+      } else {
+        title.textContent = 'Créer un centre de vidange';
+        submitBtn.textContent = 'Créer';
+        idInput.value = '';
+        nomInput.value = '';
+        latInput.value = '';
+        lngInput.value = '';
+        actifInput.checked = false;
+      }
+    });
+  })();
+</script>
+{% endblock %}

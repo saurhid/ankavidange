@@ -1,0 +1,385 @@
+{% extends 'management/base.html' %}
+{% load static %}
+
+{% block title %}Suivi des demandes - {{ block.super }}{% endblock %}
+
+{% block page_title %}
+<div class="d-flex justify-content-between align-items-center">
+    <span>Suivi des demandes</span>
+    &nbsp;
+    <div>
+        <a href="{% url 'management:request_followup' %}" class="btn btn-sm btn-primary">
+            <i class="fas fa-sync-alt"></i> Actualiser
+        </a>
+        <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#filterModal">
+            <i class="fas fa-filter"></i> Filtres
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Filter Modal -->
+<div class="modal fade" id="filterModal" tabindex="-1" aria-labelledby="filterModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="get" id="filterForm">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="filterModalLabel">Filtrer les demandes</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="status" class="form-label">Statut</label>
+                        <select class="form-select" id="status" name="status">
+                            <option value="">Tous les statuts</option>
+                            {% for value, label in status_choices.items %}
+                            <option value="{{ value }}" {% if request.GET.status == value|stringformat:'s' %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="truck" class="form-label">Vidangeur</label>
+                        <select class="form-select" id="truck" name="truck">
+                            <option value="">Tous les vidangeurs</option>
+                            {% for truck in trucks %}
+                            <option value="{{ truck.id }}" {% if request.GET.truck == truck.id|stringformat:'s' %}selected{% endif %}>
+                                {{ truck.immatriculation }} - {{ truck.modele|default:"Sans modèle" }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="start_date" class="form-label">Date de début</label>
+                            <input type="date" class="form-control" id="start_date" name="start_date" 
+                                   value="{{ request.GET.start_date }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="end_date" class="form-label">Date de fin</label>
+                            <input type="date" class="form-control" id="end_date" name="end_date" 
+                                   value="{{ request.GET.end_date }}">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="search" class="form-label">Recherche</label>
+                        <input type="text" class="form-control" id="search" name="search" 
+                               placeholder="ID, usager, adresse..." value="{{ request.GET.search }}">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <a href="{% url 'management:request_followup' %}" class="btn btn-link text-muted me-auto">
+                        Réinitialiser
+                    </a>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">Appliquer les filtres</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-3">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <div class="d-flex align-items-center">
+                            <div class="bg-primary bg-opacity-10 p-3 rounded-3 me-3">
+                                <i class="fas fa-clipboard-list text-primary"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-0">Total</h6>
+                                <span class="h4 mb-0">{{ paginator.count }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% for status in status_counts %}
+                    <div class="col-md-3">
+                        <div class="d-flex align-items-center">
+                            <div class="bg-{{ status.color }} bg-opacity-10 p-3 rounded-3 me-3">
+                                <i class="fas {{ status.icon }} text-{{ status.color }}"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-0">{{ status.name }}</h6>
+                                <span class="h4 mb-0">{{ status.count }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>ID</th>
+                        <th>Client</th>
+                        <th>Adresse</th>
+                        <th>Camion</th>
+                        <th>Date</th>
+                        <th>Statut</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for request in requests %}
+                    <tr>
+                        <td>#{{ request.id }}</td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="flex-shrink-0 me-2">
+                                    <div class="avatar-sm">
+                                        <div class="avatar-title bg-light text-primary rounded-circle">
+                                            {{ request.usager.user.first_name|first|upper }}{{ request.usager.user.last_name|first|upper }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-0">{{ request.usager.user.get_full_name }}</h6>
+                                    <small class="text-muted">{{ request.usager.user.telephone|default:"-" }}</small>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="text-truncate" style="max-width: 200px;" 
+                                 data-bs-toggle="tooltip" title="{{ request.adresse }}">
+                                {{ request.adresse }}
+                            </div>
+                        </td>
+                        <td>
+                            {% if request.camion %}
+                            <span class="badge bg-light text-dark">
+                                <i class="fas fa-truck me-1"></i>
+                                {{ request.camion.immatriculation }}
+                            </span>
+                            {% else %}-
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="d-flex flex-column">
+                                <span>{{ request.date_creation|date:"d/m/Y" }}</span>
+                                <small class="text-muted">{{ request.date_creation|date:"H:i" }}</small>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge-status badge-status-{{ request.statut|lower|slugify }}">
+                                {{ request.get_statut_display }}
+                            </span>
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group">
+                                <a href="{% url 'management:request_detail' request.id %}" 
+                                   class="btn btn-sm btn-outline-primary"
+                                   data-bs-toggle="tooltip" 
+                                   title="Voir les détails">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <button type="button" 
+                                        class="btn btn-sm btn-outline-secondary dropdown-toggle dropdown-toggle-split" 
+                                        data-bs-toggle="dropdown" 
+                                        aria-expanded="false">
+                                    <span class="visually-hidden">Actions</span>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li>
+                                        <a class="dropdown-item" href="#" 
+                                           data-bs-toggle="modal" 
+                                           data-bs-target="#updateStatusModal"
+                                           data-request-id="{{ request.id }}"
+                                           data-current-status="{{ request.statut }}">
+                                            <i class="fas fa-edit me-2"></i>Changer le statut
+                                        </a>
+                                    </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <a class="dropdown-item text-danger" href="#">
+                                            <i class="fas fa-trash-alt me-2"></i>Supprimer
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center py-5">
+                            <div class="mb-3">
+                                <i class="fas fa-inbox fa-4x text-muted"></i>
+                            </div>
+                            <h5 class="text-muted">Aucune demande trouvée</h5>
+                            <p class="text-muted">Essayez de modifier vos critères de recherche</p>
+                            <a href="{% url 'management:request_followup' %}" class="btn btn-outline-primary mt-2">
+                                Réinitialiser les filtres
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        {% if is_paginated %}
+        <div class="card-footer bg-white border-top-0">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="text-muted">
+                    Affichage de <b>{{ page_obj.start_index }}</b> à <b>{{ page_obj.end_index }}</b> 
+                    sur <b>{{ paginator.count }}</b> demandes
+                </div>
+                <nav aria-label="Page navigation">
+                    <ul class="pagination pagination-sm mb-0">
+                        {% if page_obj.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page=1{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+                               aria-label="Première">
+                                <span aria-hidden="true">&laquo;&laquo;</span>
+                            </a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+                               aria-label="Précédente">
+                                <span aria-hidden="true">&laquo;</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        
+                        {% for num in page_obj.paginator.page_range %}
+                            {% if page_obj.number == num %}
+                            <li class="page-item active">
+                                <span class="page-link">{{ num }}</span>
+                            </li>
+                            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ num }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                                    {{ num }}
+                                </a>
+                            </li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        {% if page_obj.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+                               aria-label="Suivante">
+                                <span aria-hidden="true">&raquo;</span>
+                            </a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+                               aria-label="Dernière">
+                                <span aria-hidden="true">&raquo;&raquo;</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Update Status Modal -->
+<div class="modal fade" id="updateStatusModal" tabindex="-1" aria-labelledby="updateStatusModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="updateStatusForm" method="post" action="{% url 'management:update_request_status' 0 %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title" id="updateStatusModalLabel">Mettre à jour le statut</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="newStatus" class="form-label">Nouveau statut</label>
+                        <select class="form-select" id="newStatus" name="status" required>
+                            {% for value, label in status_choices.items %}
+                            <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="statusNotes" class="form-label">Notes (optionnel)</label>
+                        <textarea class="form-control" id="statusNotes" name="notes" rows="3" 
+                                  placeholder="Ajoutez des détails sur ce changement de statut..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">Enregistrer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    // Handle status update modal
+    var updateStatusModal = document.getElementById('updateStatusModal');
+    if (updateStatusModal) {
+        updateStatusModal.addEventListener('show.bs.modal', function (event) {
+            var button = event.relatedTarget;
+            var requestId = button.getAttribute('data-request-id');
+            var currentStatus = button.getAttribute('data-current-status');
+            var form = document.getElementById('updateStatusForm');
+            
+            // Update form action URL with the request ID
+            form.action = form.action.replace('/0/', '/' + requestId + '/');
+            
+            // Set current status as selected
+            var statusSelect = document.getElementById('newStatus');
+            if (statusSelect) {
+                for (var i = 0; i < statusSelect.options.length; i++) {
+                    if (statusSelect.options[i].value === currentStatus) {
+                        statusSelect.selectedIndex = i;
+                        break;
+                    }
+                }
+            }
+        });
+    }
+    
+    // Handle form submission with filters
+    var filterForm = document.getElementById('filterForm');
+    if (filterForm) {
+        filterForm.addEventListener('submit', function(e) {
+            // Remove empty fields from the form submission
+            var inputs = filterForm.querySelectorAll('input, select');
+            inputs.forEach(function(input) {
+                if (!input.value) {
+                    input.disabled = true;
+                }
+            });
+        });
+    }
+    
+    // Initialize date pickers
+    if (typeof flatpickr !== 'undefined') {
+        flatpickr("input[type=date]", {
+            dateFormat: "Y-m-d",
+            allowInput: true,
+            locale: "fr",
+            disableMobile: true
+        });
+    }
+});
+</script>
+{% endblock %}

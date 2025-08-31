@@ -1,0 +1,133 @@
+{% extends 'management/base.html' %}
+{% load static %}
+
+{% block title %}Utilisateurs - {{ block.super }}{% endblock %}
+
+{% block page_title %}Utilisateurs{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'management:user_add' %}" class="btn btn-sm btn-primary">
+  <i class="fas fa-user-plus me-1"></i> Nouvel utilisateur
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="card mb-3">
+  <div class="card-body">
+    <form method="get" class="row g-2">
+      <div class="col-md-3">
+        <input type="text" class="form-control" name="search" placeholder="Recherche (nom, email, téléphone)" value="{{ request.GET.search }}">
+      </div>
+      <div class="col-md-3">
+        <select class="form-select" name="role">
+          <option value="">Tous les rôles</option>
+          {% for value, label in role_choices %}
+            <option value="{{ value }}" {% if request.GET.role == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <select class="form-select" name="is_active">
+          <option value="">Actif ?</option>
+          <option value="1" {% if request.GET.is_active == '1' %}selected{% endif %}>Actifs</option>
+          <option value="0" {% if request.GET.is_active == '0' %}selected{% endif %}>Inactifs</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <select class="form-select" name="is_staff">
+          <option value="">Staff ?</option>
+          <option value="1" {% if request.GET.is_staff == '1' %}selected{% endif %}>Staff</option>
+          <option value="0" {% if request.GET.is_staff == '0' %}selected{% endif %}>Non staff</option>
+        </select>
+      </div>
+      <div class="col-md-2 d-grid">
+        <button class="btn btn-outline-secondary" type="submit">
+          <i class="fas fa-filter me-1"></i> Filtrer
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body table-responsive">
+    <table class="table table-hover align-middle">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nom</th>
+          <th>Téléphone</th>
+          <th>Email</th>
+          <th>Rôle</th>
+          <th>Actif</th>
+          <th>Admin</th>
+          <th>Date d’inscription</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td>#{{ u.id }}</td>
+          <td><a href="{% url 'management:user_detail' u.id %}">{{ u.get_full_name|default:"-" }}</a></td>
+          <td>{{ u.phone_number }}</td>
+          <td>{{ u.email|default:"-" }}</td>
+          <td>{{ u.get_role_display }}</td>
+          <td>
+            {% if u.is_active %}
+              <span class="badge bg-success">Oui</span>
+            {% else %}
+              <span class="badge bg-secondary">Non</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if u.is_staff %}
+              <span class="badge bg-info text-dark">Oui</span>
+            {% else %}
+              <span class="badge bg-light text-dark">Non</span>
+            {% endif %}
+          </td>
+          <td>{{ u.date_joined|date:"d/m/Y H:i" }}</td>
+          <td class="text-end">
+            {% if u.role == 'VIDANGEUR_MEC' or u.role == 'VIDANGEUR_MAN' %}
+            {% if u.vidangeur %}
+            <a href="{% url 'management:vidangeur_tarifs' u.vidangeur.id %}" class="btn btn-sm btn-outline-success">
+              <i class="fas fa-tags"></i>
+            </a>
+            {% endif %}
+            {% endif %}
+            <a href="{% url 'management:user_edit' u.id %}" class="btn btn-sm btn-outline-primary">
+              <i class="fas fa-edit"></i>
+            </a>
+            <a href="{% url 'management:user_delete' u.id %}" class="btn btn-sm btn-outline-danger">
+              <i class="fas fa-trash"></i>
+            </a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="9" class="text-center text-muted py-4">Aucun utilisateur</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if is_paginated %}
+    <nav>
+      <ul class="pagination justify-content-end">
+        {% if page_obj.has_previous %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.role %}&role={{ request.GET.role }}{% endif %}{% if request.GET.is_active %}&is_active={{ request.GET.is_active }}{% endif %}{% if request.GET.is_staff %}&is_staff={{ request.GET.is_staff }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Précédent</a>
+        </li>
+        {% endif %}
+        <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} / {{ paginator.num_pages }}</span></li>
+        {% if page_obj.has_next %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.role %}&role={{ request.GET.role }}{% endif %}{% if request.GET.is_active %}&is_active={{ request.GET.is_active }}{% endif %}{% if request.GET.is_staff %}&is_staff={{ request.GET.is_staff }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Suivant</a>
+        </li>
+        {% endif %}
+      </ul>
+    </nav>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

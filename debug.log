@@ -1,0 +1,11 @@
+Watching for file changes with StatReloader
+"GET / HTTP/1.1" 200 8890
+Tentative de connexion avec les données: {'phone_number': '77777777', 'password': '12345678'}
+Connexion réussie pour l'utilisateur: 77777777
+"POST /api/auth/login/ HTTP/1.1" 200 642
+"GET / HTTP/1.1" 200 8890
+Tentative de connexion avec les données: {'phone_number': '77777777', 'password': '12345678'}
+Connexion réussie pour l'utilisateur: 77777777
+"POST /api/auth/login/ HTTP/1.1" 200 642
+"GET / HTTP/1.1" 200 8890
+C:\Users\Sauri\vidange_master\Allo-vidange\ankavidange\ankavidange\settings.py changed, reloading.

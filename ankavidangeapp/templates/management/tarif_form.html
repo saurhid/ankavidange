@@ -1,0 +1,66 @@
+{% extends 'management/base.html' %}
+{% load static %}
+
+{% block title %}Nouveau tarif - {{ block.super }}{% endblock %}
+{% block page_title %}Créer un tarif (Mécanique){% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'management:tarifs_list' %}" class="btn btn-sm btn-outline-secondary">
+  <i class="fas fa-arrow-left me-1"></i> Retour à la liste
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7 col-md-9">
+    <div class="card">
+      <div class="card-body">
+        <form method="post" novalidate>
+          {% csrf_token %}
+
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+          {% endif %}
+
+          <div class="mb-3">
+            <label class="form-label">Vidangeur (Mécanique)</label>
+            {{ form.vidangeur }}
+            {% if form.vidangeur.errors %}
+              <div class="text-danger small">{{ form.vidangeur.errors }}</div>
+            {% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Centre</label>
+            {{ form.centre }}
+            {% if form.centre.errors %}
+              <div class="text-danger small">{{ form.centre.errors }}</div>
+            {% endif %}
+          </div>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Tarif (FCFA)</label>
+              {{ form.prix }}
+              {% if form.prix.errors %}
+                <div class="text-danger small">{{ form.prix.errors }}</div>
+              {% endif %}
+            </div>
+            <div class="col-md-6 d-flex align-items-end">
+              <div class="form-check">
+                {{ form.actif }}
+                <label class="form-check-label" for="id_actif">Actif</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4 d-flex justify-content-end gap-2">
+            <a href="{% url 'management:tarifs_list' %}" class="btn btn-outline-secondary">Annuler</a>
+            <button type="submit" class="btn btn-primary">Enregistrer</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

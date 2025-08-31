@@ -1,0 +1,434 @@
+{% extends 'management/base.html' %}
+{% load static %}
+
+{% block title %}Tableau de bord - {{ block.super }}{% endblock %}
+
+{% block page_title %}Tableau de bord{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+    /* Styles de la carte */
+    #truckMap {
+        height: 500px;
+        width: 100%;
+        border-radius: 10px;
+        box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    }
+
+    .leaflet-container {
+        height: 100%;
+        width: 100%;
+    }
+    
+    /* Style des cartes de statistiques */
+    .stat-card {
+        border-radius: 10px;
+        transition: transform 0.3s;
+        margin-bottom: 20px;
+        border: none;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        padding: 20px;
+        text-align: center;
+    }
+    
+    .stat-card i {
+        font-size: 2.5rem;
+        margin-bottom: 15px;
+        color: #0d6efd;
+    }
+    
+    .stat-card h3 {
+        font-size: 1.8rem;
+        font-weight: bold;
+        margin: 10px 0;
+    }
+    
+    .stat-card p {
+        color: #6c757d;
+        margin: 0;
+    }
+    
+    /* Style des boutons d'action */
+    .action-buttons {
+        margin: 30px 0;
+    }
+    
+    .action-buttons .btn {
+        margin: 5px;
+        min-width: 200px;
+        font-weight: 500;
+    }
+    
+    /* Style pour la section des demandes récentes */
+    .recent-requests {
+        margin-top: 40px;
+    }
+    
+    /* Légende de la carte */
+    .map-legend {
+        background: white;
+        padding: 10px 15px;
+        border-radius: 5px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+    }
+    
+    .legend-item {
+        display: flex;
+        align-items: center;
+        margin: 5px 0;
+    }
+    
+    .legend-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        margin-right: 8px;
+    }
+    
+    /* Style du modal */
+    .modal-content {
+        border: none;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 5px 25px rgba(0,0,0,0.2);
+    }
+    
+    .modal-header {
+        background-color: #FF9F00;
+        color: white;
+        border-bottom: none;
+        padding: 1.25rem 1.5rem;
+    }
+    
+    .modal-title {
+        font-weight: 600;
+        font-size: 1.25rem;
+    }
+    
+    .btn-close {
+        filter: invert(1) grayscale(100%) brightness(200%);
+        opacity: 0.8;
+        transition: opacity 0.2s;
+    }
+    
+    .btn-close:hover {
+        opacity: 1;
+    }
+    
+    .modal-body {
+        padding: 1.5rem;
+    }
+    
+    .modal-footer {
+        background-color: #f8f9fa;
+        border-top: 1px solid #eee;
+        padding: 1rem 1.5rem;
+    }
+    
+    .btn-primary {
+        background-color: #FF9F00;
+        border-color: #FF9F00;
+        font-weight: 500;
+        padding: 0.5rem 1.5rem;
+    }
+    
+    .btn-primary:hover, .btn-primary:focus {
+        background-color: #e68a00;
+        border-color: #e68a00;
+        box-shadow: 0 0 0 0.25rem rgba(255, 159, 0, 0.25);
+    }
+    
+    .btn-secondary {
+        background-color: #6c757d;
+        border-color: #6c757d;
+        font-weight: 500;
+        padding: 0.5rem 1.5rem;
+    }
+    
+    .form-control:focus, .form-select:focus {
+        border-color: #FF9F00;
+        box-shadow: 0 0 0 0.25rem rgba(255, 159, 0, 0.15);
+    }
+    
+    .form-range::-webkit-slider-thumb {
+        background: #FF9F00;
+        width: 1.25rem;
+        height: 1.25rem;
+        margin-top: -0.5rem;
+    }
+    
+    .form-range::-moz-range-thumb {
+        background: #FF9F00;
+        width: 1.25rem;
+        height: 1.25rem;
+        border: none;
+    }
+    
+    .form-range:focus::-webkit-slider-thumb {
+        box-shadow: 0 0 0 1px #fff, 0 0 0 0.25rem rgba(255, 159, 0, 0.25);
+    }
+    
+    .form-range:focus::-moz-range-thumb {
+        box-shadow: 0 0 0 1px #fff, 0 0 0 0.25rem rgba(255, 159, 0, 0.25);
+    }
+    
+    .form-label {
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+        color: #495057;
+    }
+    
+    /* Style pour les badges de statut */
+    .badge {
+        padding: 0.5em 0.8em;
+        font-weight: 500;
+        letter-spacing: 0.5px;
+    }
+
+    /* Style pour le tableau */
+    #historiqueTable {
+        font-size: 0.9rem;
+    }
+
+    #historiqueTable th {
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.8rem;
+        color: #6c757d;
+        border-bottom-width: 2px;
+    }
+
+    #historiqueTable td {
+        vertical-align: middle;
+    }
+
+    /* Style pour les lignes du tableau */
+    #historiqueTable tbody tr {
+        transition: background-color 0.2s;
+    }
+
+    #historiqueTable tbody tr:hover {
+        background-color: rgba(255, 159, 0, 0.05);
+    }
+</style>
+{% endblock %}
+{% block content %}
+<div class="row">
+    <!-- Stats Cards -->
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-primary h-100">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                            Vidangeurs actifs</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stats.active_trucks }}</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-truck fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer d-flex align-items-center justify-content-between">
+                <a class="small text-primary stretched-link" href="{% url 'management:truck_map' %}">Voir la carte</a>
+                <div class="small text-primary"><i class="fas fa-arrow-right"></i></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-success h-100">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                            Demandes aujourd'hui</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stats.today_requests }}</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-clipboard-list fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer d-flex align-items-center justify-content-between">
+                <a class="small text-success stretched-link" href="{% url 'management:request_followup' %}">Voir les demandes</a>
+                <div class="small text-success"><i class="fas fa-arrow-right"></i></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-info h-100">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                            Utilisateurs actifs</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stats.active_users }}</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-users fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer d-flex align-items-center justify-content-between">
+                <a class="small text-info stretched-link" href="{% url 'management:user_management' %}">Gérer les utilisateurs</a>
+                <div class="small text-info"><i class="fas fa-arrow-right"></i></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-warning h-100">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                            Demandes en attente</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stats.pending_requests }}</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-comments fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer d-flex align-items-center justify-content-between">
+                <a class="small text-warning stretched-link" href="{% url 'management:request_followup' %}?status=en_attente">Voir en attente</a>
+                <div class="small text-warning"><i class="fas fa-arrow-right"></i></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row align-items-stretch g-3">
+    <!-- Truck Status -->
+    <div class="col-12 col-lg-4 d-flex">
+        <div class="card shadow mb-4 h-100 w-100">
+            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                <h6 class="m-0 font-weight-bold text-primary">Statut des Vidangeurs</h6>
+            </div>
+            <div class="card-body">
+                <div id="truckStatusChart">
+                    <!-- This will be populated by JavaScript -->
+                    <canvas id="truckChart"></canvas>
+                </div>
+                <div class="mt-4 text-center small">
+                    <span class="me-2">
+                        <i class="fas fa-circle text-success"></i> Disponible
+                    </span>
+                    <span class="me-2">
+                        <i class="fas fa-circle text-warning"></i> En mission
+                    </span>
+                    <span class="me-2">
+                        <i class="fas fa-circle text-danger"></i> Indisponible
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Requests -->
+    <div class="col-12 col-lg-8 d-flex">
+        <div class="card shadow mb-4 h-100 w-100">
+            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                <h6 class="m-0 font-weight-bold text-primary">Dernières demandes</h6>
+                <a href="{% url 'management:request_followup' %}" class="btn btn-sm btn-primary">
+                    <i class="fas fa-list fa-sm"></i> Voir tout
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="recentRequestsTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Client</th>
+                                <th>Adresse</th>
+                                <th>Date</th>
+                                <th>Statut</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for request in recent_requests %}
+                            <tr>
+                                <td>#{{ request.id }}</td>
+                                <td>{{ request.usager.user.get_full_name|default:request.usager.user.username }}</td>
+                                <td>{{ request.adresse|truncatechars:30 }}</td>
+                                <td>{{ request.date_creation|date:"d/m/Y H:i" }}</td>
+                                <td>
+                                    <span class="badge-status badge-status-{{ request.statut|lower|slugify }}">
+                                        {{ request.get_statut_display }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="{% url 'management:request_detail' request.id %}" class="btn btn-sm btn-outline-primary" 
+                                       data-bs-toggle="tooltip" title="Voir les détails">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center py-4">
+                                    <i class="fas fa-inbox fa-3x text-gray-300 mb-3"></i>
+                                    <p class="text-muted">Aucune demande récente</p>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{{ vid_status|json_script:"vid-status-data" }}
+<script>
+  (function(){
+    const el = document.getElementById('vid-status-data');
+    if (!el) return;
+    const payload = JSON.parse(el.textContent || '{}');
+    const ctx = document.getElementById('truckChart');
+    if (!ctx) return;
+    const data = {
+      labels: payload.labels || ['Disponible', 'En mission', 'Indisponible'],
+      datasets: [{
+        data: payload.data || [0,0,0],
+        backgroundColor: payload.colors || ['#198754', '#ffc107', '#dc3545'],
+        borderWidth: 0,
+      }]
+    };
+    const options = {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              const total = (ctx.dataset.data || []).reduce((a,b)=>a+(+b||0),0) || 0;
+              const value = +ctx.parsed || 0;
+              const pct = total ? Math.round((value/total)*100) : 0;
+              return `${ctx.label}: ${value} (${pct}%)`;
+            }
+          }
+        }
+      }
+    };
+    new Chart(ctx.getContext('2d'), { type: 'pie', data, options });
+  })();
+</script>
+{% endblock %}

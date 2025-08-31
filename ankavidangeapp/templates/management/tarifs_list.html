@@ -1,0 +1,110 @@
+{% extends 'management/base.html' %}
+{% load static %}
+
+{% block title %}Tarifs - {{ block.super }}{% endblock %}
+{% block page_title %}Tarifs des vidangeurs (Mécaniques){% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'management:tarifs_create' %}" class="btn btn-sm btn-primary">
+  <i class="fas fa-plus me-1"></i> Nouveau tarif
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="card mb-3">
+  <div class="card-body">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label">Recherche</label>
+        <input type="text" class="form-control" name="search" placeholder="Nom, immatriculation, centre" value="{{ request.GET.search }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Centre</label>
+        <select class="form-select" name="centre">
+          <option value="">Tous les centres</option>
+          {% for c in centres %}
+            <option value="{{ c.id }}" {% if request.GET.centre == c.id|stringformat:'s' %}selected{% endif %}>{{ c.nom }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Actif ?</label>
+        <select class="form-select" name="actif">
+          <option value="">Tous</option>
+          <option value="1" {% if request.GET.actif == '1' %}selected{% endif %}>Actifs</option>
+          <option value="0" {% if request.GET.actif == '0' %}selected{% endif %}>Inactifs</option>
+        </select>
+      </div>
+      <div class="col-md-2 d-grid">
+        <button class="btn btn-outline-secondary" type="submit">
+          <i class="fas fa-filter me-1"></i> Filtrer
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body table-responsive">
+    <table class="table table-hover align-middle">
+      <thead>
+        <tr>
+          <th>Vidangeur</th>
+          <th>Immatriculation</th>
+          <th>Centre</th>
+          <th class="text-end">Tarif (FCFA)</th>
+          <th>Statut</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tarifs %}
+        <tr>
+          <td>
+            <div class="fw-semibold">{{ t.vidangeur.user.get_full_name|default:"-" }}</div>
+            <div class="text-muted small">{{ t.vidangeur.user.phone_number }}</div>
+          </td>
+          <td>{{ t.vidangeur.immatriculation|default:"-" }}</td>
+          <td>{{ t.centre.nom }}</td>
+          <td class="text-end">{{ t.prix|floatformat:0 }}</td>
+          <td>
+            {% if t.actif %}
+              <span class="badge bg-success">Actif</span>
+            {% else %}
+              <span class="badge bg-secondary">Inactif</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <a href="{% url 'management:vidangeur_tarifs' t.vidangeur.id %}" class="btn btn-sm btn-outline-primary">
+              <i class="fas fa-pen"></i>
+            </a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="6" class="text-center text-muted py-4">Aucun tarif</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if is_paginated %}
+    <nav>
+      <ul class="pagination justify-content-end">
+        {% if page_obj.has_previous %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.centre %}&centre={{ request.GET.centre }}{% endif %}{% if request.GET.actif %}&actif={{ request.GET.actif }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Précédent</a>
+        </li>
+        {% endif %}
+        <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} / {{ paginator.num_pages }}</span></li>
+        {% if page_obj.has_next %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.centre %}&centre={{ request.GET.centre }}{% endif %}{% if request.GET.actif %}&actif={{ request.GET.actif }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Suivant</a>
+        </li>
+        {% endif %}
+      </ul>
+    </nav>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

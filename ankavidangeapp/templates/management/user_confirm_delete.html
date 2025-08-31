@@ -1,0 +1,17 @@
+{% extends 'management/base.html' %}
+
+{% block title %}Supprimer utilisateur - {{ block.super }}{% endblock %}
+{% block page_title %}Supprimer l'utilisateur{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-body">
+    <p>Voulez-vous vraiment supprimer l’utilisateur <strong>{{ object.get_full_name|default:object.phone_number }}</strong> ?</p>
+    <form method="post">
+      {% csrf_token %}
+      <a href="{% url 'management:user_management' %}" class="btn btn-outline-secondary">Annuler</a>
+      <button type="submit" class="btn btn-danger">Supprimer</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
