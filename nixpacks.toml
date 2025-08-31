@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ['python310', 'python310Packages.pip', 'gdal', 'geos', 'proj', 'postgresql']
+nixPkgs = ['python313', 'python313Packages.pip', 'gdal', 'geos', 'proj', 'postgresql']
 
 [phases.install]
 # Ensure pip exists in the environment, then install
