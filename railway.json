@@ -3,11 +3,11 @@
   "build": {
     "builder": "NIXPACKS",
     "env": {
-      "PYTHON_VERSION": "3.13"
+      "PYTHON_VERSION": "3.12"
     }
   },
   "deploy": {
-    "startCommand": "python3.13 manage.py migrate --settings=ankavidange.settings_production && gunicorn --bind 0.0.0.0:$PORT ankavidange.wsgi:application --settings=ankavidange.settings_production",
+    "startCommand": "python3.12 manage.py migrate --settings=ankavidange.settings_production && gunicorn --bind 0.0.0.0:$PORT ankavidange.wsgi:application --settings=ankavidange.settings_production",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
