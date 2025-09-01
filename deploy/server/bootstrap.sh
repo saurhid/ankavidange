@@ -20,27 +20,21 @@ apt -y install ${PY}-pip ${PY}-venv build-essential gcc \
   nginx ufw git
 
 echo "[2/8] Create Postgres DB and enable PostGIS"
-sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
-DO ${DOLLAR}${DOLLAR}
-BEGIN
-   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='${DB_USER}') THEN
-      EXECUTE format('CREATE USER %I WITH PASSWORD %L', '${DB_USER}', '${DB_PASS}');
-   END IF;
-END
-${DOLLAR}${DOLLAR} LANGUAGE plpgsql;
-\x
--- Create database if it doesn't exist and assign owner
-DO ${DOLLAR}${DOLLAR}
-BEGIN
-   IF NOT EXISTS (SELECT FROM pg_database WHERE datname='${DB_NAME}') THEN
-      EXECUTE format('CREATE DATABASE %I OWNER %I', '${DB_NAME}', '${DB_USER}');
-   END IF;
-END
-${DOLLAR}${DOLLAR} LANGUAGE plpgsql;
-\connect ${DB_NAME}
-CREATE EXTENSION IF NOT EXISTS postgis;
-CREATE EXTENSION IF NOT EXISTS postgis_topology;
-SQL
+# Create role if missing
+role_exists=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${DB_USER}'") || true
+if [ "${role_exists}" != "1" ]; then
+  sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE USER \"${DB_USER}\" WITH PASSWORD '${DB_PASS}';"
+fi
+
+# Create database if missing and set owner
+db_exists=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'") || true
+if [ "${db_exists}" != "1" ]; then
+  sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"${DB_NAME}\" OWNER \"${DB_USER}\";"
+fi
+
+# Enable PostGIS extensions
+sudo -u postgres psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+sudo -u postgres psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -c "CREATE EXTENSION IF NOT EXISTS postgis_topology;"
 
 DB_URL="postgres://${DB_USER}:${DB_PASS}@127.0.0.1:5432/${DB_NAME}"
 
