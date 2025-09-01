@@ -18,8 +18,8 @@ PORT = os.environ.get('PORT', '8000')
 
 # Allowed hosts for Railway
 ALLOWED_HOSTS = [
-    '*.railway.app',
-    '*.up.railway.app',
+    '.railway.app',
+    '.up.railway.app',
     'localhost',
     '127.0.0.1',
     '0.0.0.0',
@@ -105,12 +105,20 @@ if DATABASES['default']:
 # CORS Configuration
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
-    "https://*.railway.app",
-    "https://*.up.railway.app",
+]
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.railway\.app$",
+    r"^https://.*\.up\.railway\.app$",
 ]
 
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
+
+# CSRF trusted origins (required when SECURE_SSL_REDIRECT is enabled and behind proxies)
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.railway.app',
+    'https://*.up.railway.app',
+]
 
 # REST Framework Configuration
 REST_FRAMEWORK = {
