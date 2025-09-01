@@ -10,7 +10,7 @@ from datetime import timedelta
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Security settings
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-change-me-in-production')
+SECRET_KEY = os.environ.get('SECRET_KEY', '48fe6kewlv8hl+l8uri8zadw6)19s20n9i&!8dj4-z#wcu2^pd')
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
 # Railway provides the PORT environment variable
