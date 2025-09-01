@@ -2,10 +2,10 @@
 nixPkgs = ['python3', 'postgresql']
 
 [phases.install]
-cmds = ['python3 -m pip3 install -r requirements.txt']
+cmds = ['python3 -m pip install -r requirements.txt']
 
 [phases.build]
-cmds = ['python manage.py collectstatic --noinput --settings=ankavidange.settings_production']
+cmds = ['python3 manage.py collectstatic --noinput --settings=ankavidange.settings_production']
 
 [start]
 cmd = 'python manage.py migrate --settings=ankavidange.settings_production && gunicorn --bind 0.0.0.0:$PORT ankavidange.wsgi:application'
