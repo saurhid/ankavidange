@@ -10,6 +10,7 @@ DB_PASS=${4:-change-me}
 APP_USER=ankav
 APP_ROOT=/srv/ankavidange
 PY=python3
+DOLLAR='$'
 
 echo "[1/8] Update system and install packages"
 apt update && apt -y upgrade
@@ -20,22 +21,22 @@ apt -y install ${PY}-pip ${PY}-venv build-essential gcc \
 
 echo "[2/8] Create Postgres DB and enable PostGIS"
 sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
-DO $$
+DO ${DOLLAR}${DOLLAR}
 BEGIN
    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='${DB_USER}') THEN
       EXECUTE format('CREATE USER %I WITH PASSWORD %L', '${DB_USER}', '${DB_PASS}');
    END IF;
 END
-$$ LANGUAGE plpgsql;
+${DOLLAR}${DOLLAR} LANGUAGE plpgsql;
 \x
 -- Create database if it doesn't exist and assign owner
-DO $$
+DO ${DOLLAR}${DOLLAR}
 BEGIN
    IF NOT EXISTS (SELECT FROM pg_database WHERE datname='${DB_NAME}') THEN
       EXECUTE format('CREATE DATABASE %I OWNER %I', '${DB_NAME}', '${DB_USER}');
    END IF;
 END
-$$ LANGUAGE plpgsql;
+${DOLLAR}${DOLLAR} LANGUAGE plpgsql;
 \connect ${DB_NAME}
 CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS postgis_topology;
