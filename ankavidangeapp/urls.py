@@ -4,7 +4,8 @@ from django.views.generic import RedirectView
 # Import des vues
 from .views import (
     LogoutView, RegisterView, ProprietaireDashboardView, 
-    LandingPageView, LoginView
+    LandingPageView, LoginView,
+    search_vidangeurs, create_demande, list_user_demandes,
 )
 
 # Application namespace
@@ -27,6 +28,11 @@ urlpatterns = [
     
     # Tableau de bord propriétaire
     path('proprietaire/', ProprietaireDashboardView.as_view(), name='proprietaire_dashboard'),
+
+    # Endpoints web (session-based) pour la recherche et création de demande
+    path('web/vidangeurs/search/', search_vidangeurs, name='web_vidangeurs_search'),
+    path('web/demandes/create/', create_demande, name='web_demande_create'),
+    path('web/demandes/', list_user_demandes, name='web_demandes_list'),
     
     # URLs d'authentification - using a tuple with (patterns, app_name)
     path('auth/', include((auth_patterns, 'auth'), namespace='auth')),

@@ -261,7 +261,7 @@
                 <h5 class="modal-title" id="newRequestModalLabel">Nouvelle demande de vidangeur</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form method="post" action=""> 
+            <form method="post" action="/web/demandes/create/"> 
                 {% csrf_token %}
                 <div class="modal-body">
                     <div class="container-fluid">
@@ -294,6 +294,15 @@
                                     </div>
                                 </div>
                             </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="volume_estime" class="form-label">Volume estimé *</label>
+                                    <select class="form-select" id="volume_estime" name="volume_estime" required>
+                                        <option value="SIMPLE">Simple</option>
+                                        <option value="GRANDE">Grande</option>
+                                    </select>
+                                </div>
+                            </div>
                             <div class="col-12">
                                 <div class="mb-3">
                                     <label for="date_souhaitee" class="form-label">Date souhaitée</label>
@@ -307,6 +316,13 @@
                                     <textarea class="form-control" id="description" name="description" rows="2"></textarea>
                                 </div>
                             </div>
+                            <input type="hidden" id="vidangeur_id" name="vidangeur_id" />
+                            <div class="col-12">
+                                <div id="searchResults" class="mt-2" style="display:none;">
+                                    <h6 class="mb-2">Résultats</h6>
+                                    <div id="searchResultsBody" class="list-group"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -314,8 +330,11 @@
                     <button type="button" class="btn btn-outline-warning text-warning" style="background-color: white; border-color: #FF9F00;" data-bs-toggle="modal" data-bs-target="#newRequestModal">
                         <i class="fas fa-cancel me-2"></i>Annuler
                     </button>
-                    <button type="button" class="btn btn-outline-warning text-warning" style="background-color: white; border-color: #FF9F00;" data-bs-toggle="modal" data-bs-target="#newRequestModal">
-                        <i class="fas fa-check me-2"></i>Rechercher
+                    <button type="button" id="searchBtn" class="btn btn-outline-warning text-warning" style="background-color: white; border-color: #FF9F00;">
+                         <i class="fas fa-check me-2"></i>Rechercher
+                     </button>
+                    <button type="button" id="createDemandBtn" class="btn btn-primary" disabled>
+                        <i class="fas fa-paper-plane me-2"></i>Envoyer la demande
                     </button>
                 </div>
             </form>
@@ -410,30 +429,38 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Charger l'historique quand le modal s'ouvre
 document.getElementById('historiqueModal').addEventListener('shown.bs.modal', async function() {
+    const tbody = document.getElementById('historiqueTableBody');
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="6" class="text-center py-4">
+                <div class="spinner-border text-warning" role="status">
+                    <span class="visually-hidden">Chargement...</span>
+                </div>
+            </td>
+        </tr>`;
     try {
-        const response = await fetch('/api/demandes/');
+        const response = await fetch('/web/demandes/', { credentials: 'same-origin' });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
         const demandes = await response.json();
-        const tbody = document.getElementById('historiqueTableBody');
-        
-        if (demandes.length === 0) {
+        if (!Array.isArray(demandes) || demandes.length === 0) {
             tbody.innerHTML = `
                 <tr>
                     <td colspan="6" class="text-center">Aucune demande trouvée</td>
                 </tr>`;
-            } else {
-                tbody.innerHTML = demandes.map(demande => `
-                    <tr>
-                        <td>${demande.id}</td>
-                        <td>${new Date(demande.created_at).toLocaleDateString('fr-FR')}</td>
-                        <td>${demande.type_vidange || '-'}</td>
-                        <td>${demande.montant_propose ? new Intl.NumberFormat('fr-FR').format(demande.montant_propose) : '-'}</td>
-                        <td><span class="badge bg-${getStatusBadgeClass(demande.statut)}">${getStatusText(demande.statut)}</span></td>
-                    </tr>`
-                ).join('');
-            }
+            return;
+        }
+        tbody.innerHTML = demandes.map(d => `
+            <tr>
+                <td>${d.reference || d.id}</td>
+                <td>${d.date_demande ? new Date(d.date_demande).toLocaleString('fr-FR') : '-'}</td>
+                <td>${d.type_vidange || '-'}</td>
+                <td>${d.budget != null ? new Intl.NumberFormat('fr-FR').format(d.budget) : '-'}</td>
+                <td><span class="badge bg-${getStatusBadgeClass(d.statut)}">${getStatusText(d.statut)}</span></td>
+            </tr>
+        `).join('');
     } catch (error) {
         console.error('Erreur lors du chargement de l\'historique:', error);
-        document.getElementById('historiqueTableBody').innerHTML = `
+        tbody.innerHTML = `
             <tr>
                 <td colspan="6" class="text-center text-danger">Erreur lors du chargement des données</td>
             </tr>`;
@@ -461,5 +488,116 @@ function getStatusText(statut) {
     };
     return textes[statut] || statut;
 }
+
+// CSRF helper for session-auth POSTs
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+async function searchVidangeurs() {
+    const type = document.getElementById('type_vidange').value;
+    const budget = document.getElementById('montant_propose').value;
+    const resultsBox = document.getElementById('searchResults');
+    const body = document.getElementById('searchResultsBody');
+    const createBtn = document.getElementById('createDemandBtn');
+    document.getElementById('vidangeur_id').value = '';
+    createBtn.disabled = true;
+    if (!type) {
+        body.innerHTML = '<div class="text-danger">Veuillez sélectionner un type.</div>';
+        resultsBox.style.display = 'block';
+        return;
+    }
+    body.innerHTML = '<div class="text-center py-2"><span class="spinner-border spinner-border-sm text-warning"></span> Recherche en cours...</div>';
+    resultsBox.style.display = 'block';
+    try {
+        const url = `/web/vidangeurs/search/?type_vidange=${encodeURIComponent(type)}&budget=${encodeURIComponent(budget)}`;
+        const resp = await fetch(url, { credentials: 'same-origin' });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || 'Erreur serveur');
+        }
+        const data = await resp.json();
+        const items = data.results || [];
+        if (items.length === 0) {
+            body.innerHTML = '<div class="text-muted">Aucun vidangeur trouvé pour ce budget.</div>';
+            return;
+        }
+        body.innerHTML = items.map(it => `
+            <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center select-vidangeur" data-id="${it.id}">
+                <div>
+                    <div class=\"fw-semibold\">${it.name} <span class=\"badge bg-secondary ms-2\">${it.type}</span></div>
+                    <div class=\"text-muted small\">Tel: ${it.phone}${it.capacity ? ` · Capacité: ${it.capacity}L` : ''}</div>
+                </div>
+                <div class=\"text-end\">
+                    <div class=\"fw-bold\">${Number(it.price).toLocaleString('fr-FR')} FCFA</div>
+                </div>
+            </button>
+        `).join('');
+        document.querySelectorAll('.select-vidangeur').forEach(el => {
+            el.addEventListener('click', () => {
+                document.querySelectorAll('.select-vidangeur').forEach(e => e.classList.remove('active'));
+                el.classList.add('active');
+                document.getElementById('vidangeur_id').value = el.getAttribute('data-id');
+                createBtn.disabled = false;
+            });
+        });
+    } catch (e) {
+        body.innerHTML = `<div class="text-danger">${e.message}</div>`;
+    }
+}
+
+async function createDemande() {
+    const payload = {
+        adresse: document.getElementById('adresse').value,
+        type_vidange: document.getElementById('type_vidange').value,
+        volume_estime: document.getElementById('volume_estime').value,
+        budget: document.getElementById('montant_propose').value,
+        date_souhaitee: document.getElementById('date_souhaitee').value || null,
+        commentaire: document.getElementById('description').value || '',
+        vidangeur_id: parseInt(document.getElementById('vidangeur_id').value || '0', 10),
+    };
+    if (!payload.adresse || !payload.type_vidange || !payload.volume_estime || !payload.vidangeur_id) {
+        alert('Veuillez remplir les champs requis et sélectionner un vidangeur.');
+        return;
+    }
+    const resp = await fetch('/web/demandes/create/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken'),
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload),
+    });
+    if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        alert(err.detail || 'Erreur lors de la création de la demande');
+        return;
+    }
+    const data = await resp.json();
+    // Fermer le modal + feedback
+    const modalEl = document.getElementById('newRequestModal');
+    const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+    modal.hide();
+    alert('Demande créée avec succès. Référence: ' + (data.reference || data.id));
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const searchBtn = document.getElementById('searchBtn');
+    if (searchBtn) searchBtn.addEventListener('click', searchVidangeurs);
+    const createBtn = document.getElementById('createDemandBtn');
+    if (createBtn) createBtn.addEventListener('click', createDemande);
+});
 </script>
 {% endblock %}

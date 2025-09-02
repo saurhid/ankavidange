@@ -9,8 +9,12 @@ from django import forms
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.db.models import Count, Sum, Q, Max, OuterRef, Subquery
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods, require_POST
+from django.db.models import Min
+import json
 
-from .models import PositionGPS, Vidangeur, Demande, Notification, User, VidangeurMecanique
+from .models import PositionGPS, Vidangeur, Demande, Notification, User, VidangeurMecanique, VidangeurManuel
 
 class CustomUserCreationForm(forms.ModelForm):
     password1 = forms.CharField(label='Mot de passe', widget=forms.PasswordInput)
@@ -150,3 +154,136 @@ class LandingPageView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         # Ajoutez ici le contexte spécifique à la page d'accueil
         return context
+
+# Session-based endpoints for web (no JWT required)
+
+@login_required
+@require_http_methods(["GET"])
+def search_vidangeurs(request):
+    """Return vidangeurs filtered by type and optional max budget using session auth."""
+    type_vidange = request.GET.get('type_vidange')
+    max_budget = request.GET.get('budget')
+    results = []
+
+    if type_vidange not in ['MECANIQUE', 'MANUELLE']:
+        return JsonResponse({'detail': "Paramètre 'type_vidange' invalide"}, status=400)
+
+    if type_vidange == 'MANUELLE':
+        qs = VidangeurManuel.objects.filter(actif=True).select_related('user')
+        if max_budget:
+            try:
+                max_b = float(max_budget)
+                qs = qs.filter(tarif_manuel__lte=max_b)
+            except ValueError:
+                return JsonResponse({'detail': "Budget invalide"}, status=400)
+        for v in qs:
+            results.append({
+                'id': v.id,
+                'name': v.user.get_full_name(),
+                'phone': v.user.phone_number,
+                'type': 'MANUELLE',
+                'price': float(v.tarif_manuel),
+                'statut': getattr(v, 'statut', ''),
+            })
+
+    if type_vidange == 'MECANIQUE':
+        qs = VidangeurMecanique.objects.filter(actif=True).select_related('user').annotate(
+            min_price=Min('tarifs_centres__prix')
+        )
+        if max_budget:
+            try:
+                max_b = float(max_budget)
+                qs = qs.filter(min_price__isnull=False, min_price__lte=max_b)
+            except ValueError:
+                return JsonResponse({'detail': "Budget invalide"}, status=400)
+        for v in qs:
+            if v.min_price is None:
+                continue
+            results.append({
+                'id': v.id,
+                'name': v.user.get_full_name(),
+                'phone': v.user.phone_number,
+                'type': 'MECANIQUE',
+                'price': float(v.min_price),
+                'statut': getattr(v, 'statut', ''),
+                'capacity': v.capacite,
+            })
+
+    return JsonResponse({'count': len(results), 'results': results}, status=200)
+
+
+@login_required
+@require_POST
+def create_demande(request):
+    """Create a demande using session auth, expecting JSON payload from web."""
+    user: User = request.user
+    if user.role != User.Role.USAGER:
+        return JsonResponse({'detail': "Seuls les usagers peuvent créer une demande."}, status=403)
+
+    try:
+        data = json.loads(request.body.decode('utf-8') or '{}')
+    except Exception:
+        data = {}
+
+    required = ['adresse', 'type_vidange', 'volume_estime', 'vidangeur_id']
+    if any(not data.get(k) for k in required):
+        return JsonResponse({'detail': 'Champs requis manquants.'}, status=400)
+
+    try:
+        base = Vidangeur.objects.select_related('user').get(pk=data['vidangeur_id'])
+    except Vidangeur.DoesNotExist:
+        return JsonResponse({'detail': 'Vidangeur introuvable'}, status=400)
+
+    mec = VidangeurMecanique.objects.filter(pk=base.pk).first()
+    man = VidangeurManuel.objects.filter(pk=base.pk).first()
+    vid = mec or man or base
+
+    if data['type_vidange'] == 'MECANIQUE' and not mec:
+        return JsonResponse({'detail': "Le vidangeur sélectionné n'est pas de type mécanique."}, status=400)
+    if data['type_vidange'] == 'MANUELLE' and not man:
+        return JsonResponse({'detail': "Le vidangeur sélectionné n'est pas de type manuelle."}, status=400)
+
+    demande = Demande(
+        usager=user,
+        type_vidange=data['type_vidange'],
+        adresse=data['adresse'],
+        volume_estime=data['volume_estime'],
+        budget=data.get('budget') or None,
+        date_souhaitee=data.get('date_souhaitee') or timezone.now(),
+        commentaire=data.get('commentaire', ''),
+        vidangeur=vid,
+        statut='EN_ATTENTE',
+    )
+    try:
+        demande.full_clean(exclude=None)
+        demande.save()
+    except Exception as e:
+        return JsonResponse({'detail': str(e)}, status=400)
+
+    return JsonResponse({
+        'id': demande.id,
+        'reference': demande.reference,
+        'statut': demande.statut,
+        'type_vidange': demande.type_vidange,
+        'date_demande': demande.date_demande.isoformat(),
+    }, status=201)
+
+
+@login_required
+@require_http_methods(["GET"])
+def list_user_demandes(request):
+    """List demandes for the logged-in user (session-based)."""
+    qs = (Demande.objects
+          .filter(usager=request.user)
+          .order_by('-date_demande'))
+    data = []
+    for d in qs:
+        data.append({
+            'id': d.id,
+            'reference': d.reference,
+            'date_demande': d.date_demande.isoformat() if d.date_demande else None,
+            'type_vidange': d.type_vidange,
+            'budget': float(d.budget) if d.budget is not None else None,
+            'statut': d.statut,
+        })
+    return JsonResponse(data, safe=False)
