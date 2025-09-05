@@ -8,13 +8,24 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django import forms
 from django.urls import reverse_lazy
 from django.utils import timezone
-from django.db.models import Count, Sum, Q, Max, OuterRef, Subquery
+from datetime import timedelta
+from django.db.models import Count, Sum, Q, Max, OuterRef, Subquery, F
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods, require_POST
 from django.db.models import Min
 import json
 
 from .models import PositionGPS, Vidangeur, Demande, Notification, User, VidangeurMecanique, VidangeurManuel
+
+class ProprietaireRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
+    login_url = 'ankavidangeapp:auth:login'
+    def test_func(self):
+        return self.request.user.is_authenticated and self.request.user.role == User.Role.PROPRIETAIRE
+    def handle_no_permission(self):
+        if not self.request.user.is_authenticated:
+            return super().handle_no_permission()
+        messages.error(self.request, 'Accès refusé. Vous devez être un propriétaire pour accéder à cette page.')
+        return redirect('ankavidangeapp:landing')
 
 class CustomUserCreationForm(forms.ModelForm):
     password1 = forms.CharField(label='Mot de passe', widget=forms.PasswordInput)
@@ -92,19 +103,9 @@ class RegisterView(CreateView):
         messages.success(self.request, 'Inscription réussie ! Vous pouvez maintenant vous connecter.')
         return response
 
-class ProprietaireDashboardView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
+class ProprietaireDashboardView(ProprietaireRequiredMixin, TemplateView):
     """Vue pour le tableau de bord du propriétaire"""
     template_name = 'proprietaire/dashboard.html'
-    login_url = 'ankavidangeapp:auth:login'
-    
-    def test_func(self):
-        return self.request.user.is_authenticated and self.request.user.role == 'PROPRIETAIRE'
-    
-    def handle_no_permission(self):
-        if not self.request.user.is_authenticated:
-            return super().handle_no_permission()
-        messages.error(self.request, 'Accès refusé. Vous devez être un propriétaire pour accéder à cette page.')
-        return redirect('ankavidangeapp:landing')
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -115,34 +116,89 @@ class ProprietaireDashboardView(LoginRequiredMixin, UserPassesTestMixin, Templat
         if proprietaire_profile is None:
             messages.error(self.request, "Aucun profil propriétaire associé à cet utilisateur.")
             context.update({
-                'total_camions': 0,
-                'latest_positions': [],
-                'recent_demandes': [],
+                'total_vidangeur': 0,
+                'camions_en_service': 0,
+                'chauffeurs_hors_service': 0,
+                'revenus_mois': 0,
+                'dernieres_demandes': [],
                 'unread_notifications': Notification.objects.filter(user=user, lue=False).order_by('-created_at')[:5],
             })
             return context
         
-        # Statistiques de base
-        context['total_camions'] = VidangeurMecanique.objects.filter(proprietaire__user=user, actif=True).count()
-        
-        # Dernières positions des vidangeurs
-        latest_positions = PositionGPS.objects.filter(
-            vidangeur__vidangeurmecanique__proprietaire__user=user
-        ).select_related('vidangeur', 'vidangeur__vidangeurmecanique').order_by('vidangeur', '-timestamp').distinct('vidangeur')
-        
-        context['latest_positions'] = latest_positions
-        
-        # Dernières demandes
-        context['recent_demandes'] = Demande.objects.filter(
-            vidangeur__vidangeurmecanique__proprietaire__user=user
-        ).select_related('vidangeur', 'vidangeur__vidangeurmecanique').order_by('-date_creation')[:5]
-        
+        # Base queryset: vidangeurs mécaniques du propriétaire
+        vm_qs = VidangeurMecanique.objects.filter(proprietaire__user=user)
+
+        # Statistiques de base attendues par le template
+        context['total_vidangeur'] = vm_qs.count()
+        context['camions_en_service'] = vm_qs.filter(statut__in=['DISPONIBLE', 'EN_MISSION']).count()
+        context['chauffeurs_hors_service'] = vm_qs.filter(statut='INDISPONIBLE').count()
+
+        # Revenus des 30 derniers jours (sommes budgets des demandes terminées)
+        now = timezone.now()
+        since = now - timedelta(days=30)
+        revenus = (Demande.objects
+                  .filter(
+                      vidangeur__vidangeurmecanique__proprietaire__user=user,
+                      statut='TERMINEE',
+                      date_fin__gte=since,
+                      date_fin__lte=now,
+                  )
+                  .aggregate(total=Sum('budget'))['total'] or 0)
+        context['revenus_mois'] = float(revenus)
+
+        # Dernières demandes (adapter aux champs utilisés par le template)
+        dernieres = (Demande.objects
+                     .filter(vidangeur__vidangeurmecanique__proprietaire__user=user)
+                     .select_related('usager', 'vidangeur__user')
+                     .order_by('-date_creation')[:5]
+                     )
+        # Annoter un alias 'montant' attendu par le template
+        # Si l'annotation via queryset n'est pas possible ici (slice déjà appliquée), on complète en mémoire
+        for d in dernieres:
+            setattr(d, 'montant', d.budget)
+        context['dernieres_demandes'] = dernieres
+
+        # Vidangeurs mécaniques géolocalisés (pour affichage sur la carte)
+        locs = (
+            vm_qs.select_related('user')
+                 .exclude(position_actuelle__isnull=True)
+        )
+        context['vidangeurs_geo'] = [
+            {
+                'id': v.id,
+                'name': v.user.get_full_name(),
+                'lat': v.latitude,
+                'lng': v.longitude,
+                'statut': v.statut,
+                'capacite': v.capacite,
+                'immatriculation': v.immatriculation,
+            }
+            for v in locs
+        ]
+
+        # Liste des vidangeurs mécaniques du propriétaire (proprietaire.id == vidangeur.proprietaire.id)
+        vlist_qs = (
+            VidangeurMecanique.objects
+            .filter(proprietaire__user=user)
+            .select_related('user', 'proprietaire')
+            .order_by('user__last_name', 'user__first_name')
+        )
+        context['vidangeurs_mec'] = [
+            {
+                'id': v.id,
+                'name': v.user.get_full_name() or v.user.phone_number,
+                'immatriculation': v.immatriculation,
+                'capacite': v.capacite,
+                'statut': v.statut,
+                'latitude': v.latitude,
+                'longitude': v.longitude,
+            }
+            for v in vlist_qs
+        ]
+
         # Notifications non lues
-        context['unread_notifications'] = Notification.objects.filter(
-            user=user,
-            lue=False
-        ).order_by('-created_at')[:5]
-        
+        context['unread_notifications'] = Notification.objects.filter(user=user, lue=False).order_by('-created_at')[:5]
+
         return context
 
 class LandingPageView(LoginRequiredMixin, TemplateView):
@@ -287,3 +343,80 @@ def list_user_demandes(request):
             'statut': d.statut,
         })
     return JsonResponse(data, safe=False)
+
+class ProprietaireDemandesListView(ProprietaireRequiredMixin, TemplateView):
+    template_name = 'proprietaire/demandes_list.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        qs = (Demande.objects
+              .filter(vidangeur__vidangeurmecanique__proprietaire__user=user)
+              .select_related('usager', 'vidangeur__user')
+              .order_by('-date_creation'))
+        context['demandes'] = qs[:100]
+        return context
+
+class ProprietaireDemandeDetailView(ProprietaireRequiredMixin, TemplateView):
+    template_name = 'proprietaire/demande_detail.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        demande_id = self.kwargs.get('pk')
+        demande = (Demande.objects
+                   .select_related('usager', 'vidangeur__user')
+                   .filter(id=demande_id, vidangeur__vidangeurmecanique__proprietaire__user=user)
+                   .first())
+        if not demande:
+            messages.error(self.request, "Demande introuvable ou non autorisée.")
+            return context
+        context['demande'] = demande
+        return context
+
+class ProprietaireDemandeEditView(ProprietaireRequiredMixin, TemplateView):
+    template_name = 'proprietaire/demande_edit.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        demande_id = self.kwargs.get('pk')
+        demande = (Demande.objects
+                   .select_related('usager', 'vidangeur__user')
+                   .filter(id=demande_id, vidangeur__vidangeurmecanique__proprietaire__user=user)
+                   .first())
+        if not demande:
+            messages.error(self.request, "Demande introuvable ou non autorisée.")
+            return context
+        context['demande'] = demande
+        return context
+
+class ProprietaireVidangeursListView(LoginRequiredMixin, TemplateView):
+    template_name = 'proprietaire/vidangeurs_list.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+
+        # Filtrer les vidangeurs mécaniques appartenant au propriétaire connecté
+        vlist_qs = (
+            VidangeurMecanique.objects
+            .filter(proprietaire__user=user)
+            .select_related('user', 'proprietaire')
+            .order_by('user__last_name', 'user__first_name')
+        )
+
+        context['vidangeurs_mec'] = [
+            {
+                'id': v.id,
+                'name': v.user.get_full_name() or v.user.username,
+                'immatriculation': v.immatriculation,
+                'capacite': v.capacite,
+                'statut': v.statut,
+                'latitude': v.latitude,
+                'longitude': v.longitude,
+            }
+            for v in vlist_qs
+        ]
+
+        return context

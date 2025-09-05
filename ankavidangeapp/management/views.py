@@ -86,7 +86,7 @@ class DashboardView(StaffRequiredMixin, TemplateView):
         }
         
         for stat in weekly_stats:
-            day_index = (today - stat['date_creation__date'].date()).days
+            day_index = (today - stat['date_creation__date']).days
             if 0 <= day_index <= 6:
                 chart_data['data'][6 - day_index] = stat['total']
         

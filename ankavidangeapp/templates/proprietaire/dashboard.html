@@ -215,6 +215,14 @@
     #historiqueTable tbody tr:hover {
         background-color: rgba(255, 159, 0, 0.05);
     }
+    
+    /* Map marker styles (same as management truck_map) */
+    .map-marker { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.35); }
+    .map-marker.blue { background: #0d6efd; }
+    .map-marker.orange { background: #fd7e14; }
+    .map-marker.green { background: #198754; }
+    .map-marker.red { background: #e74c3c; }
+    .map-marker i { font-size: 14px; line-height: 1; }
 </style>
 {% endblock %}
 {% block dashboard_content %}
@@ -310,7 +318,7 @@
             <div class="card h-100">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">Dernières demandes</h5>
-                    <a href="#" class="btn btn-sm btn-outline-primary">
+                    <a href="{% url 'ankavidangeapp:proprietaire_demandes' %}" class="btn btn-sm btn-outline-primary">
                         Voir tout <i class="fas fa-arrow-right ms-1"></i>
                     </a>
                 </div>
@@ -350,22 +358,15 @@
                                     </td>
                                     <td>{{ demande.date_creation|date:"d/m/Y H:i" }}</td>
                                     <td>{{ demande.montant|default:"-" }} FCFA</td>
-                                    <td>
-                                        <span class="badge bg-{{ demande.get_statut_badge }} bg-opacity-10 text-{{ demande.get_statut_badge }} px-2 py-1">
-                                            <i class="fas fa-circle me-1" style="font-size: 0.5rem;"></i>
-                                            {{ demande.get_statut_display }}
-                                        </span>
-                                    </td>
+                                    <td>{{ demande.get_statut_display }}</td>
                                     <td class="text-end pe-4">
                                         <div class="dropdown">
                                             <button class="btn btn-sm btn-link text-muted" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                                                 <i class="fas fa-ellipsis-v"></i>
                                             </button>
                                             <ul class="dropdown-menu dropdown-menu-end">
-                                                <li><a class="dropdown-item" href="#"><i class="far fa-eye me-2"></i>Voir détails</a></li>
-                                                <li><a class="dropdown-item" href="#"><i class="far fa-edit me-2"></i>Modifier</a></li>
-                                                <li><hr class="dropdown-divider"></li>
-                                                <li><a class="dropdown-item text-danger" href="#"><i class="far fa-trash-alt me-2"></i>Supprimer</a></li>
+                                                <li><a class="dropdown-item" href="{% url 'ankavidangeapp:proprietaire_demande_detail' demande.id %}"><i class="far fa-eye me-2"></i>Voir détails</a></li>
+                                                <li><a class="dropdown-item" href="{% url 'ankavidangeapp:proprietaire_demande_edit' demande.id %}"><i class="far fa-edit me-2"></i>Modifier</a></li>
                                             </ul>
                                         </div>
                                     </td>
@@ -395,10 +396,7 @@
         </div>
     </div>
 </div>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{{ vidangeurs_geo|json_script:"vidangeurs-geo" }}
 <script>
   // Initialize map
   var map = L.map('CamMap2').setView([12.6392, -8.0024], 13);
@@ -408,5 +406,55 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>',
     subdomains: ['a', 'b', 'c']
 }).addTo(map);
+
+// Helpers to create icons (replicates management truck_map)
+function iconForStatusClass(cls) {
+  return L.divIcon({
+    className: 'fa-marker',
+    html: `<div class="map-marker ${cls}"><i class="fa-solid fa-truck"></i></div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -14]
+  });
+}
+
+// Keep statusColor for compatibility/use elsewhere
+const statusColor = (s) => ({
+  'DISPONIBLE': '#2ecc71',
+  'EN_MISSION': '#f39c12',
+  'INDISPONIBLE': '#e74c3c'
+})[s] || '#3498db';
+
+// Map status to CSS class matching the above colors
+const statusClass = (s) => ({
+  'DISPONIBLE': 'green',
+  'EN_MISSION': 'orange',
+  'INDISPONIBLE': 'red'
+})[s] || 'blue';
+
+// Plot proprietor's trucks with truck icons
+try {
+  const trucks = JSON.parse(document.getElementById('vidangeurs-geo').textContent);
+  const markers = [];
+  trucks.forEach(t => {
+    if (t.lat == null || t.lng == null) return;
+    const m = L.marker([t.lat, t.lng], { icon: iconForStatusClass(statusClass(t.statut)) }).addTo(map);
+    m.bindPopup(`
+      <div>
+        <strong>${t.name}</strong><br/>
+        ${t.immatriculation ? 'Immat: ' + t.immatriculation + '<br/>' : ''}
+        ${t.capacite ? 'Capacité: ' + t.capacite + ' L<br/>' : ''}
+        Statut: ${t.statut}
+      </div>
+    `);
+    markers.push(m);
+  });
+  if (markers.length > 0) {
+    const group = L.featureGroup(markers);
+    map.fitBounds(group.getBounds().pad(0.2));
+  }
+} catch (e) {
+  console.warn('No trucks to display or JSON parse error', e);
+}
 </script>
 {% endblock %}

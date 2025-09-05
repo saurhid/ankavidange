@@ -140,13 +140,9 @@
                                 <div class="flex-shrink-0 me-2">
                                     <div class="avatar-sm">
                                         <div class="avatar-title bg-light text-primary rounded-circle">
-                                            {{ request.usager.user.first_name|first|upper }}{{ request.usager.user.last_name|first|upper }}
+                                            {{ request.usager.get_full_name|default:request.usager.phone_number }}
                                         </div>
                                     </div>
-                                </div>
-                                <div class="flex-grow-1">
-                                    <h6 class="mb-0">{{ request.usager.user.get_full_name }}</h6>
-                                    <small class="text-muted">{{ request.usager.user.telephone|default:"-" }}</small>
                                 </div>
                             </div>
                         </td>

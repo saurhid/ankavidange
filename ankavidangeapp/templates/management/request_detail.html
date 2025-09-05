@@ -1,0 +1,230 @@
+{% extends 'management/base.html' %}
+{% load static %}
+
+{% block title %}Détails de la demande #{{ request_obj.id }} - {{ block.super }}{% endblock %}
+
+{% block page_title %}
+<div class="d-flex justify-content-between align-items-center">
+  <div class="d-flex align-items-center gap-2">
+    <a href="{% url 'management:request_followup' %}" class="btn btn-sm btn-link text-decoration-none">
+      <i class="fas fa-arrow-left"></i> Retour
+    </a>
+    <span>Détails de la demande #{{ request_obj.id }}</span>
+  </div>
+  <div class="d-flex align-items-center gap-2">
+    <a href="{% url 'management:request_followup' %}" class="btn btn-sm btn-primary">
+      <i class="fas fa-list"></i> Toutes les demandes
+    </a>
+    <button type="button" class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#updateStatusModal"
+            data-request-id="{{ request_obj.id }}" data-current-status="{{ request_obj.statut }}">
+      <i class="fas fa-edit"></i> Changer le statut
+    </button>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start mb-3">
+          <div>
+            <h5 class="mb-1">Demande #{{ request_obj.id }}</h5>
+            <div class="text-muted small">
+              Créée le {{ request_obj.date_creation|date:'d/m/Y H:i' }}
+            </div>
+          </div>
+          <div>
+            <span class="badge bg-primary">{{ request_obj.get_statut_display }}</span>
+          </div>
+        </div>
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="border rounded p-3 h-100">
+              <div class="text-muted small mb-1">Client</div>
+              <div class="d-flex align-items-center">
+                <div class="avatar-sm me-2">
+                  <div class="avatar-title bg-light text-primary rounded-circle">
+                    {{ request_obj.usager.get_full_name|default:request_obj.usager.phone_number|default:'-' }}
+                  </div>
+                </div>
+                <div>
+                  <div class="fw-semibold">{{ request_obj.usager.get_full_name|default:request_obj.usager.phone_number|default:'-' }}</div>
+                  <div class="text-muted small">{{ request_obj.usager.phone_number|default:'-' }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="border rounded p-3 h-100">
+              <div class="text-muted small mb-1">Vidangeur</div>
+              {% if request_obj.vidangeur %}
+              <div class="d-flex align-items-center">
+                <div class="avatar-sm me-2">
+                  <div class="avatar-title bg-light text-success rounded-circle">
+                    {{ request_obj.vidangeur.user.get_full_name|default:request_obj.vidangeur.user.phone_number|default:'-' }}
+                  </div>
+                </div>
+                <div>
+                  <div class="fw-semibold">{{ request_obj.vidangeur.user.get_full_name|default:request_obj.vidangeur.user.phone_number|default:'-' }}</div>
+                  <div class="text-muted small">{{ request_obj.vidangeur.user.phone_number|default:'-' }}</div>
+                </div>
+              </div>
+              {% else %}
+              <div class="text-muted">Aucun vidangeur assigné</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="col-md-12">
+            <div class="border rounded p-3">
+              <div class="text-muted small mb-1">Adresse d'intervention</div>
+              <div>{{ request_obj.adresse|default:'-' }}</div>
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <div class="border rounded p-3 h-100">
+              <div class="text-muted small mb-1">Type de vidange</div>
+              <div class="fw-semibold">{{ request_obj.get_type_vidange_display|default:request_obj.type_vidange }}</div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="border rounded p-3 h-100">
+              <div class="text-muted small mb-1">Volume estimé</div>
+              <div class="fw-semibold">{{ request_obj.volume_estime|default:'-' }}</div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="border rounded p-3 h-100">
+              <div class="text-muted small mb-1">Budget</div>
+              <div class="fw-semibold">{% if request_obj.budget %}{{ request_obj.budget }} FCFA{% else %}-{% endif %}</div>
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <div class="border rounded p-3 h-100">
+              <div class="text-muted small mb-1">Date souhaitée</div>
+              <div class="fw-semibold">{{ request_obj.date_souhaitee|date:'d/m/Y H:i'|default:'-' }}</div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="border rounded p-3 h-100">
+              <div class="text-muted small mb-1">Dates d'intervention</div>
+              <div class="small">
+                Début: {{ request_obj.date_debut_intervention|date:'d/m/Y H:i'|default:'-' }}<br>
+                Fin: {{ request_obj.date_fin_intervention|date:'d/m/Y H:i'|default:'-' }}
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="border rounded p-3">
+              <div class="text-muted small mb-1">Commentaire</div>
+              <div>{{ request_obj.commentaire|linebreaksbr|default:'-' }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card shadow-sm mb-3">
+      <div class="card-body">
+        <h6 class="mb-3">Actions</h6>
+        <div class="d-grid gap-2">
+          <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#updateStatusModal"
+                  data-request-id="{{ request_obj.id }}" data-current-status="{{ request_obj.statut }}">
+            <i class="fas fa-edit"></i> Mettre à jour le statut
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h6 class="mb-3">Historique</h6>
+        <ul class="list-unstyled mb-0">
+          <li class="mb-2">
+            <i class="fas fa-circle text-success me-2"></i>
+            <strong>Création:</strong> {{ request_obj.date_creation|date:'d/m/Y H:i' }}
+          </li>
+          {% if request_obj.date_debut_intervention %}
+          <li class="mb-2">
+            <i class="fas fa-circle text-warning me-2"></i>
+            <strong>Début intervention:</strong> {{ request_obj.date_debut_intervention|date:'d/m/Y H:i' }}
+          </li>
+          {% endif %}
+          {% if request_obj.date_fin_intervention %}
+          <li class="mb-2">
+            <i class="fas fa-circle text-primary me-2"></i>
+            <strong>Fin intervention:</strong> {{ request_obj.date_fin_intervention|date:'d/m/Y H:i' }}
+          </li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Update Status Modal (shared pattern) -->
+<div class="modal fade" id="updateStatusModal" tabindex="-1" aria-labelledby="updateStatusModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="updateStatusForm" method="post" action="{% url 'management:update_request_status' request_obj.id %}">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title" id="updateStatusModalLabel">Mettre à jour le statut</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="newStatus" class="form-label">Nouveau statut</label>
+            <select class="form-select" id="newStatus" name="status" required>
+              {% for value, label in request_obj.STATUT_CHOIX|default:request_obj.STATUT_CHOICES %}
+              <option value="{{ value }}" {% if request_obj.statut == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="statusNotes" class="form-label">Notes (optionnel)</label>
+            <textarea class="form-control" id="statusNotes" name="notes" rows="3"
+                      placeholder="Ajoutez des détails sur ce changement de statut..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var updateStatusModal = document.getElementById('updateStatusModal');
+  if (updateStatusModal) {
+    updateStatusModal.addEventListener('show.bs.modal', function (event) {
+      var button = event.relatedTarget;
+      if (!button) return;
+      var currentStatus = button.getAttribute('data-current-status');
+      var statusSelect = document.getElementById('newStatus');
+      if (statusSelect) {
+        for (var i = 0; i < statusSelect.options.length; i++) {
+          if (statusSelect.options[i].value === currentStatus) {
+            statusSelect.selectedIndex = i;
+            break;
+          }
+        }
+      }
+    });
+  }
+});
+</script>
+{% endblock %}

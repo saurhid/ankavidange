@@ -175,6 +175,7 @@ class VidangeurProfileSerializer(serializers.Serializer):
 
 class DemandeSerializer(serializers.ModelSerializer):
     usager_name = serializers.SerializerMethodField()
+    usager_phone = serializers.SerializerMethodField()
     latitude = serializers.SerializerMethodField()
     longitude = serializers.SerializerMethodField()
 
@@ -183,12 +184,15 @@ class DemandeSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'reference', 'statut', 'type_vidange', 'adresse', 'date_demande',
             'date_debut_intervention', 'date_fin_intervention', 'date_debut', 'date_fin',
-            'volume_traite', 'usager_name', 'latitude', 'longitude'
+            'volume_traite', 'usager_name', 'usager_phone', 'latitude', 'longitude'
         ]
         read_only_fields = fields
 
     def get_usager_name(self, obj):
         return obj.usager.get_full_name() if obj.usager else None
+
+    def get_usager_phone(self, obj):
+        return getattr(obj.usager, 'phone_number', None) if obj.usager else None
 
     def get_latitude(self, obj):
         return obj.latitude
@@ -235,3 +239,39 @@ class NotificationTestSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=100, required=False, default='Test notification')
     body = serializers.CharField(max_length=255, required=False, default='Bonjour depuis Allo-vidange')
     data = serializers.DictField(child=serializers.CharField(), required=False, default=dict)
+
+class OwnerTruckSerializer(serializers.ModelSerializer):
+    user_full_name = serializers.CharField(source='user.get_full_name', read_only=True)
+    phone_number = serializers.CharField(source='user.phone_number', read_only=True)
+    latitude = serializers.FloatField(read_only=True)
+    longitude = serializers.FloatField(read_only=True)
+
+    class Meta:
+        model = VidangeurMecanique
+        fields = [
+            'id', 'immatriculation', 'marque', 'modele', 'annee', 'capacite',
+            'statut', 'actif', 'latitude', 'longitude', 'user_full_name', 'phone_number'
+        ]
+        read_only_fields = fields
+
+class OwnerDemandeSerializer(serializers.ModelSerializer):
+    usager_name = serializers.SerializerMethodField()
+    vidangeur_id = serializers.IntegerField(source='vidangeur.id', read_only=True)
+    vidangeur_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Demande
+        fields = [
+            'id', 'reference', 'statut', 'type_vidange', 'adresse', 'date_demande',
+            'date_debut_intervention', 'date_fin_intervention', 'date_debut', 'date_fin',
+            'budget', 'volume_traite', 'usager_name', 'vidangeur_id', 'vidangeur_name'
+        ]
+        read_only_fields = fields
+
+    def get_usager_name(self, obj):
+        return obj.usager.get_full_name() if obj.usager else None
+
+    def get_vidangeur_name(self, obj):
+        if obj.vidangeur and obj.vidangeur.user:
+            return obj.vidangeur.user.get_full_name()
+        return None

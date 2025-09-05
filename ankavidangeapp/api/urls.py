@@ -28,5 +28,13 @@ urlpatterns = [
     path('demands/<int:pk>/accept/', views.AcceptDemandView.as_view(), name='demand_accept'),
     path('demands/<int:pk>/complete/', views.CompleteDemandView.as_view(), name='demand_complete'),
     path('demands/<int:pk>/cancel/', views.CancelDemandView.as_view(), name='demand_cancel'),
+    # New endpoints for mobile demande flow
+    path('vidangeurs/search/', views.SearchVidangeursView.as_view(), name='vidangeurs_search'),
+    path('demands/create/', views.DemandeCreateView.as_view(), name='demand_create'),
+    # Owner endpoints
+    path('owner/dashboard', views.OwnerDashboardView.as_view(), name='owner_dashboard'),
+    path('owner/trucks', views.OwnerTrucksView.as_view(), name='owner_trucks'),
+    path('owner/demandes', views.OwnerDemandesView.as_view(), name='owner_demandes'),
+    path('owner/revenue', views.OwnerRevenueView.as_view(), name='owner_revenue'),
     path('', include(router.urls)),
 ]

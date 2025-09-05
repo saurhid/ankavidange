@@ -13,6 +13,8 @@ from django.shortcuts import get_object_or_404
 
 from django_filters import rest_framework as django_filters
 
+from rest_framework.pagination import PageNumberPagination
+
 from ..models import (
     User, 
     Vidangeur,
@@ -37,12 +39,16 @@ from ..api.serializers import (
     FCMRegisterSerializer,
     FCMTokenSerializer,
     NotificationTestSerializer,
+    OwnerTruckSerializer,
+    OwnerDemandeSerializer,
 )
 
 from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 
 from django.conf import settings
-from django.db.models import Min, Q
+from django.db.models import Min, Q, Sum
+from django.db.models.functions import TruncDay, TruncWeek, TruncMonth
+from datetime import datetime
 
 # Firebase Admin lazy init
 try:
@@ -584,3 +590,127 @@ class DemandeCreateView(APIView):
         demande.full_clean(exclude=None)
         demande.save()
         return Response(DemandeSerializer(demande).data, status=status.HTTP_201_CREATED)
+
+class IsProprietaire(permissions.BasePermission):
+    """Allow only authenticated users with Proprietaire role."""
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated and request.user.role == User.Role.PROPRIETAIRE)
+
+def _parse_date(s):
+    if not s:
+        return None
+    try:
+        dt = datetime.fromisoformat(s)
+        if timezone.is_naive(dt):
+            return timezone.make_aware(dt)
+        return dt
+    except Exception:
+        return None
+
+def _owner_trucks_qs(user):
+    # Only mechanical trucks tied to this proprietor
+    return VidangeurMecanique.objects.filter(proprietaire__user=user).select_related('user')
+
+
+class OwnerPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+
+class OwnerDashboardView(APIView):
+    permission_classes = [IsAuthenticated, IsProprietaire]
+
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        trucks_qs = _owner_trucks_qs(user)
+        truck_ids = list(trucks_qs.values_list('id', flat=True))
+
+        # Ongoing demandes: EN_COURS or EN_ATTENTE for these trucks
+        ongoing_qs = Demande.objects.filter(vidangeur_id__in=truck_ids, statut__in=['EN_COURS', 'EN_ATTENTE'])
+        ongoing_count = ongoing_qs.count()
+
+        # Income sum over optional date range (defaults last 30 days)
+        to_dt = _parse_date(request.query_params.get('to')) or timezone.now()
+        from_dt = _parse_date(request.query_params.get('from')) or (to_dt - timedelta(days=30))
+        income = Demande.objects.filter(
+            vidangeur_id__in=truck_ids,
+            statut='TERMINEE',
+            date_fin__gte=from_dt,
+            date_fin__lte=to_dt,
+        ).aggregate(total=Sum('budget'))['total'] or 0
+
+        return Response({
+            'trucks_count': trucks_qs.count(),
+            'ongoing_demandes': ongoing_count,
+            'income': float(income),
+            'range': {'from': from_dt.isoformat(), 'to': to_dt.isoformat()},
+        })
+
+class OwnerTrucksView(APIView):
+    permission_classes = [IsAuthenticated, IsProprietaire]
+
+    def get(self, request, *args, **kwargs):
+        qs = _owner_trucks_qs(request.user)
+        data = OwnerTruckSerializer(qs, many=True).data
+        return Response({'count': len(data), 'results': data})
+
+class OwnerDemandesView(APIView):
+    permission_classes = [IsAuthenticated, IsProprietaire]
+
+    def get(self, request, *args, **kwargs):
+        trucks_qs = _owner_trucks_qs(request.user)
+        truck_ids = list(trucks_qs.values_list('id', flat=True))
+
+        qs = Demande.objects.filter(vidangeur_id__in=truck_ids).select_related('vidangeur__user', 'usager')
+
+        # Filters
+        statuses = request.query_params.getlist('status') or []
+        if statuses:
+            qs = qs.filter(statut__in=statuses)
+        from_dt = _parse_date(request.query_params.get('from'))
+        to_dt = _parse_date(request.query_params.get('to'))
+        if from_dt:
+            qs = qs.filter(date_demande__gte=from_dt)
+        if to_dt:
+            qs = qs.filter(date_demande__lte=to_dt)
+
+        qs = qs.order_by('-date_demande')
+
+        paginator = OwnerPagination()
+        page = paginator.paginate_queryset(qs, request)
+        serializer = OwnerDemandeSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+class OwnerRevenueView(APIView):
+    permission_classes = [IsAuthenticated, IsProprietaire]
+
+    def get(self, request, *args, **kwargs):
+        trucks_qs = _owner_trucks_qs(request.user)
+        truck_ids = list(trucks_qs.values_list('id', flat=True))
+
+        gran = (request.query_params.get('granularity') or 'daily').lower()
+        to_dt = _parse_date(request.query_params.get('to')) or timezone.now()
+        from_dt = _parse_date(request.query_params.get('from')) or (to_dt - timedelta(days=30))
+
+        qs = Demande.objects.filter(
+            vidangeur_id__in=truck_ids,
+            statut='TERMINEE',
+            date_fin__gte=from_dt,
+            date_fin__lte=to_dt,
+        )
+
+        if gran == 'daily':
+            trunc = TruncDay('date_fin')
+        elif gran == 'weekly':
+            trunc = TruncWeek('date_fin')
+        else:
+            trunc = TruncMonth('date_fin')
+
+        agg = qs.annotate(period=trunc).values('period').order_by('period').annotate(total=Sum('budget'))
+        results = [{'period': r['period'].date().isoformat(), 'total': float(r['total'] or 0)} for r in agg]
+
+        return Response({
+            'granularity': gran,
+            'range': {'from': from_dt.isoformat(), 'to': to_dt.isoformat()},
+            'points': results,
+            'sum': float(sum(r['total'] for r in results)),
+        })

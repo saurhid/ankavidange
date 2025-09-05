@@ -1,0 +1,48 @@
+{% extends 'proprietaire/base_proprietaire.html' %}
+{% load static %}
+
+{% block title %}Détail Demande - Propriétaire{% endblock %}
+
+{% block dashboard_content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">Détail de la demande</h1>
+  <div>
+    <a href="{% url 'ankavidangeapp:proprietaire_dashboard' %}" class="btn btn-sm btn-outline-secondary me-2">
+      <i class="fas fa-list me-1"></i> Retour au tableau de bord
+    </a>
+    {% if demande %}
+    <a href="{% url 'ankavidangeapp:proprietaire_demande_edit' demande.id %}" class="btn btn-sm btn-primary">
+      <i class="far fa-edit me-1"></i> Modifier
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+{% if not demande %}
+  <div class="alert alert-warning">Demande introuvable.</div>
+{% else %}
+<div class="card">
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="mb-2"><strong>Référence:</strong> {{ demande.reference }}</div>
+        <div class="mb-2"><strong>Client:</strong> {{ demande.usager.get_full_name|default:demande.usager.username }}</div>
+        <div class="mb-2"><strong>Type:</strong> {{ demande.get_type_vidange_display }}</div>
+        <div class="mb-2"><strong>Adresse:</strong> {{ demande.adresse }}</div>
+        <div class="mb-2"><strong>Volume estimé:</strong> {{ demande.volume_estime }}</div>
+      </div>
+      <div class="col-md-6">
+        <div class="mb-2"><strong>Date de création:</strong> {{ demande.date_creation|date:"d/m/Y H:i" }}</div>
+        <div class="mb-2"><strong>Budget:</strong> {{ demande.budget|default:"-" }} FCFA</div>
+        <div class="mb-2"><strong>Statut:</strong> {{ demande.get_statut_display }}</div>
+        <div class="mb-2"><strong>Vidangeur:</strong> {{ demande.vidangeur.user.get_full_name|default:demande.vidangeur.user.username }}</div>
+      </div>
+    </div>
+    {% if demande.commentaire %}
+    <hr>
+    <div><strong>Commentaire:</strong><br>{{ demande.commentaire }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

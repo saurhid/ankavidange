@@ -1,0 +1,46 @@
+{% extends 'proprietaire/base_proprietaire.html' %}
+{% load static %}
+
+{% block title %}Modifier Demande - Propriétaire{% endblock %}
+
+{% block dashboard_content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">Modifier la demande</h1>
+  <a href="{% url 'ankavidangeapp:proprietaire_dashboard' %}" class="btn btn-sm btn-outline-secondary">
+    <i class="fas fa-arrow-left me-1"></i> Retour au tableau de bord
+  </a>
+</div>
+
+{% if not demande %}
+  <div class="alert alert-warning">Demande introuvable.</div>
+{% else %}
+<form>
+  <div class="card">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Adresse</label>
+          <input type="text" class="form-control" value="{{ demande.adresse }}" disabled>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Type</label>
+          <input type="text" class="form-control" value="{{ demande.get_type_vidange_display }}" disabled>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Budget (FCFA)</label>
+          <input type="text" class="form-control" value="{{ demande.budget }}" disabled>
+        </div>
+        <div class="col-md-12">
+          <label class="form-label">Commentaire</label>
+          <textarea class="form-control" rows="4" disabled>{{ demande.commentaire }}</textarea>
+        </div>
+      </div>
+    </div>
+    <div class="card-footer d-flex justify-content-end gap-2">
+      <a href="{% url 'ankavidangeapp:proprietaire_demande_detail' demande.id %}" class="btn btn-outline-secondary">Annuler</a>
+      <button type="button" class="btn btn-primary" disabled>Enregistrer (à implémenter)</button>
+    </div>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

@@ -362,7 +362,7 @@
                             {% for request in recent_requests %}
                             <tr>
                                 <td>#{{ request.id }}</td>
-                                <td>{{ request.usager.user.get_full_name|default:request.usager.user.username }}</td>
+                                <td>{{ request.usager.get_full_name|default:request.usager.phone_number }}</td>
                                 <td>{{ request.adresse|truncatechars:30 }}</td>
                                 <td>{{ request.date_creation|date:"d/m/Y H:i" }}</td>
                                 <td>

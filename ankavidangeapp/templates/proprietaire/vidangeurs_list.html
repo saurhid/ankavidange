@@ -1,0 +1,45 @@
+{% extends 'proprietaire/base_proprietaire.html' %}
+{% block title %}Mes Vidangeurs{% endblock %}
+{% block dashboard_content %}
+<div class="card shadow mb-4">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <h5 class="m-0">Mes vidangeurs (mécaniques)</h5>
+  </div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Chauffeur</th>
+            <th>Immatriculation</th>
+            <th>Capacité (L)</th>
+            <th>Statut</th>
+            <th>Position</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in vidangeurs_mec %}
+          <tr>
+            <td>{{ t.id }}</td>
+            <td>{{ t.name }}</td>
+            <td>{{ t.immatriculation|default:'-' }}</td>
+            <td>{{ t.capacite|default:'-' }}</td>
+            <td>{{ t.statut }}</td>
+            <td>
+              {% if t.latitude and t.longitude %}
+                {{ t.latitude|floatformat:6 }}, {{ t.longitude|floatformat:6 }}
+              {% else %}-{% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" class="text-center py-4 text-muted">Aucun vidangeur mécanique trouvé</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

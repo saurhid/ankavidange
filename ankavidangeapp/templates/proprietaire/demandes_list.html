@@ -1,0 +1,67 @@
+{% extends 'proprietaire/base_proprietaire.html' %}
+{% load static %}
+
+{% block title %}Demandes - Propriétaire{% endblock %}
+
+{% block dashboard_content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">Demandes</h1>
+  <a href="{% url 'ankavidangeapp:proprietaire_dashboard' %}" class="btn btn-sm btn-outline-secondary">
+    <i class="fas fa-arrow-left me-1"></i> Retour au tableau de bord
+  </a>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="bg-light">
+          <tr>
+            <th class="ps-4">Référence</th>
+            <th>Client</th>
+            <th>Type</th>
+            <th>Date</th>
+            <th>Budget</th>
+            <th>Statut</th>
+            <th class="text-end pe-4">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in demandes %}
+          <tr>
+            <td class="ps-4"><span class="text-muted">{{ d.reference }}</span></td>
+            <td>{{ d.usager.get_full_name|default:d.usager.username }}</td>
+            <td><span class="badge bg-soft-primary text-primary">{{ d.get_type_vidange_display }}</span></td>
+            <td>{{ d.date_creation|date:"d/m/Y H:i" }}</td>
+            <td>{{ d.budget|default:"-" }} FCFA</td>
+            <td>
+              <span class="badge bg-{{ d.get_statut_badge }} bg-opacity-10 text-{{ d.get_statut_badge }} px-2 py-1">
+                <i class="fas fa-circle me-1" style="font-size: .5rem"></i>
+                {{ d.get_statut_display }}
+              </span>
+            </td>
+            <td class="text-end pe-4">
+              <a class="btn btn-sm btn-outline-primary me-1" href="{% url 'ankavidangeapp:proprietaire_demande_detail' d.id %}">
+                <i class="far fa-eye"></i>
+              </a>
+              <a class="btn btn-sm btn-outline-secondary" href="{% url 'ankavidangeapp:proprietaire_demande_edit' d.id %}">
+                <i class="far fa-edit"></i>
+              </a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7" class="text-center py-4">
+              <div class="text-muted">
+                <i class="fas fa-inbox fa-2x mb-2"></i>
+                <p class="mb-0">Aucune demande pour le moment</p>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -6,6 +6,8 @@ from .views import (
     LogoutView, RegisterView, ProprietaireDashboardView, 
     LandingPageView, LoginView,
     search_vidangeurs, create_demande, list_user_demandes,
+    ProprietaireDemandesListView, ProprietaireDemandeDetailView, ProprietaireDemandeEditView,
+    ProprietaireVidangeursListView,
 )
 
 # Application namespace
@@ -28,6 +30,10 @@ urlpatterns = [
     
     # Tableau de bord propriétaire
     path('proprietaire/', ProprietaireDashboardView.as_view(), name='proprietaire_dashboard'),
+    path('proprietaire/vidangeurs/', ProprietaireVidangeursListView.as_view(), name='proprietaire_vidangeurs'),
+    path('proprietaire/demandes/', ProprietaireDemandesListView.as_view(), name='proprietaire_demandes'),
+    path('proprietaire/demandes/<int:pk>/', ProprietaireDemandeDetailView.as_view(), name='proprietaire_demande_detail'),
+    path('proprietaire/demandes/<int:pk>/edit/', ProprietaireDemandeEditView.as_view(), name='proprietaire_demande_edit'),
 
     # Endpoints web (session-based) pour la recherche et création de demande
     path('web/vidangeurs/search/', search_vidangeurs, name='web_vidangeurs_search'),
