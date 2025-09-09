@@ -112,19 +112,11 @@ class DashboardView(StaffRequiredMixin, TemplateView):
                     'chauffeur': v.user.get_full_name() if v.user else 'Aucun'
                 })
         
-        # Vidangeur status aggregation for pie chart
+        # Vidangeur status aggregation (distinct counts) based solely on current Vidangeur.statut
         active_vidangeurs = Vidangeur.objects.filter(actif=True)
-        # En mission: has at least one ongoing Demande (EN_COURS)
-        en_mission_ids = set(
-            Demande.objects.filter(statut='EN_COURS', vidangeur__isnull=False)
-            .values_list('vidangeur_id', flat=True)
-        )
-        indisponible_ids = set(
-            active_vidangeurs.filter(statut='INDISPONIBLE').values_list('id', flat=True)
-        )
-        disponible_count = active_vidangeurs.exclude(id__in=en_mission_ids | indisponible_ids).count()
-        en_mission_count = len(en_mission_ids & set(active_vidangeurs.values_list('id', flat=True)))
-        indisponible_count = len(indisponible_ids)
+        disponible_count = active_vidangeurs.filter(statut='DISPONIBLE').values('id').distinct().count()
+        en_mission_count = active_vidangeurs.filter(statut='EN_MISSION').values('id').distinct().count()
+        indisponible_count = active_vidangeurs.filter(statut='INDISPONIBLE').values('id').distinct().count()
 
         context.update({
             'title': 'Tableau de bord',
@@ -308,6 +300,12 @@ class UserCreateForm(forms.ModelForm):
     # Champs additionnels pour Proprietaire
     nom_societe = forms.CharField(label='Nom de la société', required=False)
     contact = forms.CharField(label='Contact', required=False)
+    type = forms.ChoiceField(
+        label='Type', required=False,
+        choices=[('PERSONNE_PHYSIQUE', 'Personne physique'), ('PERSONNE_MORALE', 'Personne morale')],
+        initial='PERSONNE_PHYSIQUE'
+    )
+    numero_agrement = forms.CharField(label="Numéro d'agrément", required=False)
     # Champs additionnels pour Vidangeur
     proprietaire = forms.ModelChoiceField(
         label='Propriétaire', required=False,
@@ -320,6 +318,8 @@ class UserCreateForm(forms.ModelForm):
     annee = forms.IntegerField(label='Année', required=False)
     capacite = forms.IntegerField(label='Capacité (L)', required=False)
     tarif_manuel = forms.DecimalField(label='Tarif (FCFA) — Vidangeur manuel', max_digits=10, decimal_places=2, min_value=0, required=False)
+    stationnement_lat = forms.DecimalField(label='Stationnement Latitude', required=False)
+    stationnement_lng = forms.DecimalField(label='Stationnement Longitude', required=False)
 
     class Meta:
         model = User
@@ -342,6 +342,10 @@ class UserCreateForm(forms.ModelForm):
                     raise forms.ValidationError(f"{f.replace('_',' ').title()} est requis pour un Vidangeur (Mécanique).")
         if role == User.Role.VIDANGEUR_MAN and cleaned.get('tarif_manuel') is None:
             raise forms.ValidationError('Tarif (manuel) est requis pour un Vidangeur (Manuelle).')
+        # Stationnement: require both coords or none
+        lat, lng = cleaned.get('stationnement_lat'), cleaned.get('stationnement_lng')
+        if (lat and not lng) or (lng and not lat):
+            raise forms.ValidationError('Fournissez à la fois Latitude et Longitude pour le stationnement, ou laissez les deux vides.')
         return cleaned
 
     def save(self, commit=True):
@@ -349,13 +353,19 @@ class UserCreateForm(forms.ModelForm):
         password = cleaned.pop('password1')
         cleaned.pop('password2', None)
         # Extra fields
-        extra_owner = {k: cleaned.pop(k, None) for k in ['nom_societe', 'contact']}
-        extra_v_fields = {k: cleaned.pop(k, None) for k in ['proprietaire', 'numero_permis', 'immatriculation', 'marque', 'modele', 'annee', 'capacite', 'tarif_manuel']}
+        extra_owner = {k: cleaned.pop(k, None) for k in ['nom_societe', 'contact', 'type', 'numero_agrement']}
+        extra_v_fields = {k: cleaned.pop(k, None) for k in ['proprietaire', 'numero_permis', 'immatriculation', 'marque', 'modele', 'annee', 'capacite', 'tarif_manuel', 'stationnement_lat', 'stationnement_lng']}
         # Create user via manager
         user = User.objects.create_user(phone_number=cleaned['phone_number'], password=password, **{k: cleaned[k] for k in ['first_name','last_name','email','role','is_active','is_staff']})
         # Create appropriate profile
         if user.role == User.Role.PROPRIETAIRE:
-            Proprietaire.objects.create(user=user, nom_societe=extra_owner.get('nom_societe',''), contact=extra_owner.get('contact',''))
+            Proprietaire.objects.create(
+                user=user,
+                nom_societe=extra_owner.get('nom_societe',''),
+                contact=extra_owner.get('contact',''),
+                type=extra_owner.get('type') or 'PERSONNE_PHYSIQUE',
+                numero_agrement=extra_owner.get('numero_agrement') or ''
+            )
         elif user.role == User.Role.VIDANGEUR_MEC:
             VidangeurMecanique.objects.create(
                 user=user,
@@ -367,11 +377,22 @@ class UserCreateForm(forms.ModelForm):
                 annee=extra_v_fields.get('annee') or None,
                 capacite=extra_v_fields.get('capacite') or None,
             )
+            # Set stationnement on base vidangeur
+            lat, lng = extra_v_fields.get('stationnement_lat'), extra_v_fields.get('stationnement_lng')
+            if lat is not None and lng is not None:
+                v = Vidangeur.objects.get(user=user)
+                v.stationnement = Point(float(lng), float(lat))
+                v.save(update_fields=['stationnement'])
         elif user.role == User.Role.VIDANGEUR_MAN:
             VidangeurManuel.objects.create(
                 user=user,
                 tarif_manuel=extra_v_fields.get('tarif_manuel')
             )
+            lat, lng = extra_v_fields.get('stationnement_lat'), extra_v_fields.get('stationnement_lng')
+            if lat is not None and lng is not None:
+                v = Vidangeur.objects.get(user=user)
+                v.stationnement = Point(float(lng), float(lat))
+                v.save(update_fields=['stationnement'])
         return user
 
 class UserUpdateForm(forms.ModelForm):
@@ -381,6 +402,11 @@ class UserUpdateForm(forms.ModelForm):
     # Proprietaire extras
     nom_societe = forms.CharField(label='Nom de la société', required=False)
     contact = forms.CharField(label='Contact', required=False)
+    type = forms.ChoiceField(
+        label='Type', required=False,
+        choices=[('PERSONNE_PHYSIQUE', 'Personne physique'), ('PERSONNE_MORALE', 'Personne morale')]
+    )
+    numero_agrement = forms.CharField(label="Numéro d'agrément", required=False)
     # Vidangeur extras
     proprietaire = forms.ModelChoiceField(
         label='Propriétaire', required=False,
@@ -393,6 +419,8 @@ class UserUpdateForm(forms.ModelForm):
     annee = forms.IntegerField(label='Année', required=False)
     capacite = forms.IntegerField(label='Capacité (L)', required=False)
     tarif_manuel = forms.DecimalField(label='Tarif (FCFA) — Vidangeur manuel', max_digits=10, decimal_places=2, min_value=0, required=False)
+    stationnement_lat = forms.DecimalField(label='Stationnement Latitude', required=False)
+    stationnement_lng = forms.DecimalField(label='Stationnement Longitude', required=False)
 
     class Meta:
         model = User
@@ -405,6 +433,9 @@ class UserUpdateForm(forms.ModelForm):
         if hasattr(user, 'proprietaire_profile'):
             self.fields['nom_societe'].initial = user.proprietaire_profile.nom_societe
             self.fields['contact'].initial = user.proprietaire_profile.contact
+            # Prefill new proprietor fields if available
+            self.fields['type'].initial = getattr(user.proprietaire_profile, 'type', None)
+            self.fields['numero_agrement'].initial = getattr(user.proprietaire_profile, 'numero_agrement', '')
         # Prefill from vidangeur subclasses
         vm = VidangeurMecanique.objects.filter(user=user).first()
         if vm:
@@ -419,6 +450,14 @@ class UserUpdateForm(forms.ModelForm):
             vman = VidangeurManuel.objects.filter(user=user).first()
             if vman:
                 self.fields['tarif_manuel'].initial = vman.tarif_manuel
+        # Prefill stationnement from base vidangeur
+        v_base = Vidangeur.objects.filter(user=user).first()
+        if v_base and v_base.stationnement:
+            try:
+                self.fields['stationnement_lat'].initial = v_base.stationnement.y
+                self.fields['stationnement_lng'].initial = v_base.stationnement.x
+            except Exception:
+                pass
 
     def clean(self):
         cleaned = super().clean()
@@ -438,6 +477,10 @@ class UserUpdateForm(forms.ModelForm):
         elif role == User.Role.VIDANGEUR_MAN:
             if cleaned.get('tarif_manuel') is None:
                 raise forms.ValidationError('Tarif (manuel) est requis pour un Vidangeur (Manuelle).')
+        # Stationnement: require both or none
+        lat, lng = cleaned.get('stationnement_lat'), cleaned.get('stationnement_lng')
+        if (lat and not lng) or (lng and not lat):
+            raise forms.ValidationError('Fournissez à la fois Latitude et Longitude pour le stationnement, ou laissez les deux vides.')
         return cleaned
 
     def save(self, commit=True):
@@ -451,11 +494,17 @@ class UserUpdateForm(forms.ModelForm):
         if user.role == User.Role.PROPRIETAIRE:
             prop, created = Proprietaire.objects.get_or_create(user=user, defaults={
                 'nom_societe': cleaned.get('nom_societe',''),
-                'contact': cleaned.get('contact','')
+                'contact': cleaned.get('contact',''),
+                'type': cleaned.get('type') or 'PERSONNE_PHYSIQUE',
+                'numero_agrement': cleaned.get('numero_agrement') or ''
             })
             if not created:
                 prop.nom_societe = cleaned.get('nom_societe','')
                 prop.contact = cleaned.get('contact','')
+                if 'type' in cleaned:
+                    prop.type = cleaned.get('type') or 'PERSONNE_PHYSIQUE'
+                if 'numero_agrement' in cleaned:
+                    prop.numero_agrement = cleaned.get('numero_agrement') or ''
                 prop.save()
             # Clean up any vidangeur subclasses if role changed away from vidangeur
             VidangeurMecanique.objects.filter(user=user).delete()
@@ -482,6 +531,12 @@ class UserUpdateForm(forms.ModelForm):
                 vm.capacite = cleaned.get('capacite') or None
                 vm.full_clean()
                 vm.save()
+            # Update stationnement on base vidangeur
+            lat, lng = cleaned.get('stationnement_lat'), cleaned.get('stationnement_lng')
+            v = Vidangeur.objects.filter(user=user).first()
+            if v and lat is not None and lng is not None:
+                v.stationnement = Point(float(lng), float(lat))
+                v.save(update_fields=['stationnement'])
         elif user.role == User.Role.VIDANGEUR_MAN:
             # Remove mechanical subclass if exists
             VidangeurMecanique.objects.filter(user=user).delete()
@@ -492,6 +547,12 @@ class UserUpdateForm(forms.ModelForm):
                 vman.tarif_manuel = cleaned.get('tarif_manuel')
                 vman.full_clean()
                 vman.save(update_fields=['tarif_manuel'])
+            # Update stationnement on base vidangeur
+            lat, lng = cleaned.get('stationnement_lat'), cleaned.get('stationnement_lng')
+            v = Vidangeur.objects.filter(user=user).first()
+            if v and lat is not None and lng is not None:
+                v.stationnement = Point(float(lng), float(lat))
+                v.save(update_fields=['stationnement'])
         return user
 
 class UserCreateView(StaffRequiredMixin, FormView):

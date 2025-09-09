@@ -269,7 +269,17 @@
                             <div class="col-12">
                                 <div class="mb-3">
                                     <label for="adresse" class="form-label">Adresse *</label>
-                                    <input type="text" class="form-control" id="adresse" name="adresse" required>
+                                    <input type="text" class="form-control" id="adresse" name="adresse" placeholder="Saisissez une adresse ou choisissez un point sur la carte">
+                                    <div class="form-text">Vous pouvez saisir une adresse ou <a href="#" id="toggleAddressMap">sélectionner sur la carte</a>.</div>
+                                    <div id="addressMapWrapper" class="mt-2" style="display:none;">
+                                        <div id="addressMap" style="height:300px;border-radius:8px;border:1px solid #eee;"></div>
+                                        <div class="d-flex justify-content-between mt-2 small text-muted">
+                                            <span>Cliquez sur la carte pour définir l'emplacement.</span>
+                                            <a href="#" id="clearAddressPoint">Effacer le point</a>
+                                        </div>
+                                    </div>
+                                    <input type="hidden" id="latitude" name="latitude">
+                                    <input type="hidden" id="longitude" name="longitude">
                                 </div>
                             </div>
                             <div class="col-12">
@@ -400,6 +410,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{{ available_trucks|json_script:"user_available_trucks" }}
 <script>
   // Initialize map
   var map = L.map('truckMap').setView([12.6392, -8.0024], 13);
@@ -409,6 +420,58 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>',
     subdomains: ['a', 'b', 'c']
 }).addTo(map);
+
+// Helper functions for marker styling
+function statusClass(statut) {
+  switch ((statut || '').toUpperCase()) {
+    case 'DISPONIBLE': return 'success';
+    case 'EN_MISSION': return 'primary';
+    case 'EN_COURS': return 'primary';
+    case 'INDISPONIBLE': return 'secondary';
+    default: return 'secondary';
+  }
+}
+
+function iconForStatusClass(cls) {
+  // Use a Font Awesome truck icon with color based on status
+  const colorMap = {
+    success: '#28a745',
+    primary: '#0d6efd',
+    secondary: '#6c757d'
+  };
+  const color = colorMap[cls] || '#6c757d';
+  return L.divIcon({
+    html: `<i class="fa-solid fa-truck" style="color:${color}; font-size: 24px;"></i>`,
+    className: 'fa-truck-marker',
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+    popupAnchor: [0, -12]
+  });
+}
+
+ try {
+  const trucks = JSON.parse(document.getElementById('user_available_trucks').textContent);
+  const markers = [];
+  trucks.forEach(t => {
+    if (t.lat == null || t.lng == null) return;
+    const m = L.marker([t.lat, t.lng], { icon: iconForStatusClass(statusClass(t.statut)) }).addTo(map);
+    m.bindPopup(`
+      <div>
+        <strong>${t.name}</strong><br/>
+        ${t.immatriculation ? 'Immat: ' + t.immatriculation + '<br/>' : ''}
+        ${t.capacite ? 'Capacité: ' + t.capacite + ' L<br/>' : ''}
+        Statut: ${t.statut}
+      </div>
+    `);
+    markers.push(m);
+  });
+  if (markers.length > 0) {
+    const group = L.featureGroup(markers);
+    map.fitBounds(group.getBounds().pad(0.2));
+  }
+ } catch (e) {
+  console.warn('No trucks to display or JSON parse error', e);
+ }
 </script>
 
 <script>
@@ -470,7 +533,6 @@ document.getElementById('historiqueModal').addEventListener('shown.bs.modal', as
 function getStatusBadgeClass(statut) {
     const classes = {
         'EN_ATTENTE': 'warning',
-        'VALIDE': 'info',
         'EN_COURS': 'primary',
         'TERMINEE': 'success',
         'ANNULEE': 'secondary'
@@ -481,7 +543,6 @@ function getStatusBadgeClass(statut) {
 function getStatusText(statut) {
     const textes = {
         'EN_ATTENTE': 'En attente',
-        'VALIDE': 'Validée',
         'EN_COURS': 'En cours',
         'TERMINEE': 'Terminée',
         'ANNULEE': 'Annulée'
@@ -567,8 +628,18 @@ async function createDemande() {
         commentaire: document.getElementById('description').value || '',
         vidangeur_id: parseInt(document.getElementById('vidangeur_id').value || '0', 10),
     };
-    if (!payload.adresse || !payload.type_vidange || !payload.volume_estime || !payload.vidangeur_id) {
-        alert('Veuillez remplir les champs requis et sélectionner un vidangeur.');
+    // Include optional coordinates when user selected on map
+    const lat = (document.getElementById('latitude').value || '').trim();
+    const lng = (document.getElementById('longitude').value || '').trim();
+    if (lat !== '' && lng !== '') {
+        payload.latitude = parseFloat(lat);
+        payload.longitude = parseFloat(lng);
+    }
+    // Client-side validation: require either address or both coords
+    const hasAddress = (payload.adresse || '').trim().length > 0;
+    const hasCoords = typeof payload.latitude === 'number' && typeof payload.longitude === 'number' && !Number.isNaN(payload.latitude) && !Number.isNaN(payload.longitude);
+    if ((!hasAddress && !hasCoords) || !payload.type_vidange || !payload.volume_estime || !payload.vidangeur_id) {
+        alert('Veuillez saisir une adresse ou choisir un point sur la carte, et compléter les champs requis.');
         return;
     }
     const resp = await fetch('/web/demandes/create/', {
@@ -593,7 +664,79 @@ async function createDemande() {
     alert('Demande créée avec succès. Référence: ' + (data.reference || data.id));
 }
 
+// Map interaction for address selection
+let addressMap, addressMarker;
+function ensureAddressMap() {
+    if (addressMap) {
+        setTimeout(() => addressMap.invalidateSize(), 200);
+        return;
+    }
+    addressMap = L.map('addressMap').setView([12.6392, -8.0024], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>',
+        subdomains: ['a', 'b', 'c']
+    }).addTo(addressMap);
+    addressMap.on('click', async function(e) {
+        const lat = e.latlng.lat;
+        const lng = e.latlng.lng;
+        if (addressMarker) {
+            addressMap.removeLayer(addressMarker);
+        }
+        addressMarker = L.marker([lat, lng]).addTo(addressMap);
+        document.getElementById('latitude').value = lat.toFixed(6);
+        document.getElementById('longitude').value = lng.toFixed(6);
+        // Reverse geocode to fill address
+        try {
+            const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`;
+            const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+            const data = await res.json();
+            const disp = data.display_name || '';
+            if (disp) {
+                document.getElementById('adresse').value = disp;
+            }
+        } catch (err) {
+            console.warn('Reverse geocoding failed', err);
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
+    const toggle = document.getElementById('toggleAddressMap');
+    const wrapper = document.getElementById('addressMapWrapper');
+    const clearBtn = document.getElementById('clearAddressPoint');
+    if (toggle) {
+        toggle.addEventListener('click', function(ev) {
+            ev.preventDefault();
+            if (wrapper.style.display === 'none') {
+                wrapper.style.display = '';
+                ensureAddressMap();
+                setTimeout(() => addressMap.invalidateSize(), 200);
+            } else {
+                wrapper.style.display = 'none';
+            }
+        });
+    }
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function(ev) {
+            ev.preventDefault();
+            if (addressMarker && addressMap) {
+                addressMap.removeLayer(addressMarker);
+                addressMarker = null;
+            }
+            document.getElementById('latitude').value = '';
+            document.getElementById('longitude').value = '';
+        });
+    }
+    // Recompute map size when modal shown
+    const newReqModal = document.getElementById('newRequestModal');
+    if (newReqModal) {
+        newReqModal.addEventListener('shown.bs.modal', function() {
+            if (wrapper && wrapper.style.display !== 'none') {
+                ensureAddressMap();
+                setTimeout(() => addressMap.invalidateSize(), 200);
+            }
+        });
+    }
     const searchBtn = document.getElementById('searchBtn');
     if (searchBtn) searchBtn.addEventListener('click', searchVidangeurs);
     const createBtn = document.getElementById('createDemandBtn');

@@ -35,13 +35,17 @@
           <label class="form-label">Rôle</label>
           {{ form.role|add_class:"form-select" }}
         </div>
-        <div class="col-md-2 form-check d-flex align-items-center">
-          <label class="form-check-label me-2">Actif</label>
-          {{ form.is_active|add_class:"form-check-input" }}
+        <div class="col-6 col-md-2">
+          <div class="form-check">
+            {{ form.is_active|add_class:"form-check-input" }}
+            <label class="form-check-label" for="id_is_active">Actif</label>
+          </div>
         </div>
-        <div class="col-md-2 form-check d-flex align-items-center">
-          <label class="form-check-label me-2">Staff</label>
-          {{ form.is_staff|add_class:"form-check-input" }}
+        <div class="col-6 col-md-2">
+          <div class="form-check">
+            {{ form.is_staff|add_class:"form-check-input" }}
+            <label class="form-check-label" for="id_is_staff">Admin</label>
+          </div>
         </div>
 
         {% if form.password1 %}
@@ -75,6 +79,14 @@
           <div class="col-md-6">
             <label class="form-label">Contact</label>
             {{ form.contact|add_class:"form-control" }}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Type</label>
+            {{ form.type|add_class:"form-select" }}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Numéro d'agrément</label>
+            {{ form.numero_agrement|add_class:"form-control" }}
           </div>
         </div>
 
@@ -111,6 +123,14 @@
           <div class="col-md-4 manual-only">
             <label class="form-label">Tarif (FCFA) — Vidangeur manuel</label>
             {{ form.tarif_manuel|add_class:"form-control" }}
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Stationnement latitude</label>
+            {{ form.stationnement_lat|add_class:"form-control" }}
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Stationnement longitude</label>
+            {{ form.stationnement_lng|add_class:"form-control" }}
           </div>
         </div>
       </div>

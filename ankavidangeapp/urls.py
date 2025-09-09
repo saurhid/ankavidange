@@ -8,6 +8,7 @@ from .views import (
     search_vidangeurs, create_demande, list_user_demandes,
     ProprietaireDemandesListView, ProprietaireDemandeDetailView, ProprietaireDemandeEditView,
     ProprietaireVidangeursListView,
+    RootRedirectView,
 )
 
 # Application namespace
@@ -22,8 +23,8 @@ auth_patterns = [
 
 # URLs de l'application
 urlpatterns = [
-    #redirect / to auth/login
-    path('', RedirectView.as_view(url='auth/login/', permanent=False), name='login'),
+    # redirect '/' smartly based on authentication/role
+    path('', RootRedirectView.as_view(), name='root'),
     
     # Page d'accueil
     path('landing/', LandingPageView.as_view(), name='landing'),

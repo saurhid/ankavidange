@@ -13,10 +13,12 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 from pathlib import Path
 import os
 from datetime import timedelta
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+load_dotenv()
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
@@ -200,3 +202,7 @@ SESSION_COOKIE_AGE = 3600  # 1 hour in seconds
 SESSION_SAVE_EVERY_REQUEST = True
 SESSION_COOKIE_SECURE = True  # For HTTPS
 SESSION_COOKIE_HTTPONLY = True
+
+# Firebase Admin credentials path (JSON service account)
+# Set env var FIREBASE_CREDENTIALS_PATH to the absolute path of your service account JSON
+FIREBASE_CREDENTIALS_PATH = os.getenv('C:/Users/Sauri/vidange_master/Ankavidange/ankavidange-fb4d0e7f6a74.json')

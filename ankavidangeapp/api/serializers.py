@@ -4,7 +4,7 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, RefreshToken
 from rest_framework_simplejwt.settings import api_settings
 from django.utils import timezone
-from ..models import Vidangeur, VidangeurMecanique, VidangeurManuel, Demande, Device
+from ..models import Vidangeur, VidangeurMecanique, VidangeurManuel, Demande, Device, Proprietaire
 from django.db.models import Min
 from decimal import Decimal
 
@@ -183,8 +183,7 @@ class DemandeSerializer(serializers.ModelSerializer):
         model = Demande
         fields = [
             'id', 'reference', 'statut', 'type_vidange', 'adresse', 'date_demande',
-            'date_debut_intervention', 'date_fin_intervention', 'date_debut', 'date_fin',
-            'volume_traite', 'usager_name', 'usager_phone', 'latitude', 'longitude'
+            'date_debut_intervention', 'date_fin_intervention', 'usager_name', 'usager_phone', 'latitude', 'longitude'
         ]
         read_only_fields = fields
 
@@ -210,16 +209,33 @@ class VidangeurSearchResultSerializer(serializers.Serializer):
     capacity = serializers.IntegerField(required=False, allow_null=True)
 
 class DemandeCreateSerializer(serializers.Serializer):
-    adresse = serializers.CharField()
+    adresse = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     type_vidange = serializers.ChoiceField(choices=[c[0] for c in Demande.TYPE_VIDANGE_CHOICES])
     volume_estime = serializers.ChoiceField(choices=[c[0] for c in Demande.TYPE_FOSSE_CHOICES])
     budget = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
     date_souhaitee = serializers.DateTimeField(required=False, allow_null=True)
     commentaire = serializers.CharField(required=False, allow_blank=True)
     vidangeur_id = serializers.IntegerField()
+    latitude = serializers.FloatField(required=False, allow_null=True)
+    longitude = serializers.FloatField(required=False, allow_null=True)
 
     def validate(self, attrs):
-        # Basic sanity checks can be extended here
+        # Require either a non-empty address or both coordinates
+        adresse = (attrs.get('adresse') or '').strip()
+        lat = attrs.get('latitude')
+        lng = attrs.get('longitude')
+        if not adresse:
+            if lat is None or lng is None:
+                raise serializers.ValidationError({'adresse': "Fournissez une adresse ou bien sélectionnez un point sur la carte (latitude/longitude)."})
+        else:
+            # If adresse provided but one of lat/lng provided alone, enforce both
+            if (lat is not None and lng is None) or (lng is not None and lat is None):
+                raise serializers.ValidationError({'latitude': 'Latitude et Longitude doivent être fournies ensemble.'})
+        # Basic sanity checks
+        if lat is not None and not (-90 <= float(lat) <= 90):
+            raise serializers.ValidationError({'latitude': 'Latitude must be between -90 and 90'})
+        if lng is not None and not (-180 <= float(lng) <= 180):
+            raise serializers.ValidationError({'longitude': 'Longitude must be between -180 and 180'})
         return attrs
 
 class FCMRegisterSerializer(serializers.Serializer):
@@ -263,8 +279,7 @@ class OwnerDemandeSerializer(serializers.ModelSerializer):
         model = Demande
         fields = [
             'id', 'reference', 'statut', 'type_vidange', 'adresse', 'date_demande',
-            'date_debut_intervention', 'date_fin_intervention', 'date_debut', 'date_fin',
-            'budget', 'volume_traite', 'usager_name', 'vidangeur_id', 'vidangeur_name'
+            'date_debut_intervention', 'date_fin_intervention', 'budget', 'usager_name', 'vidangeur_id', 'vidangeur_name'
         ]
         read_only_fields = fields
 
@@ -275,3 +290,32 @@ class OwnerDemandeSerializer(serializers.ModelSerializer):
         if obj.vidangeur and obj.vidangeur.user:
             return obj.vidangeur.user.get_full_name()
         return None
+
+class OwnerProfileSerializer(serializers.ModelSerializer):
+    user = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Proprietaire
+        fields = [
+            'user',
+            'nom_societe',
+            'contact',
+            'type',
+            'numero_agrement',
+            'verification_status',
+            'date_verification',
+            'notes_verification',
+        ]
+        read_only_fields = fields
+
+    def get_user(self, obj):
+        u = obj.user
+        return {
+            'id': u.id,
+            'phone_number': u.phone_number,
+            'first_name': u.first_name,
+            'last_name': u.last_name,
+            'full_name': f"{u.first_name} {u.last_name}".strip(),
+            'role': u.role,
+            'date_joined': u.date_joined,
+        }

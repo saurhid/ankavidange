@@ -13,6 +13,7 @@ from django.db.models import Count, Sum, Q, Max, OuterRef, Subquery, F
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods, require_POST
 from django.db.models import Min
+from django.views import View
 import json
 
 from .models import PositionGPS, Vidangeur, Demande, Notification, User, VidangeurMecanique, VidangeurManuel
@@ -208,9 +209,54 @@ class LandingPageView(LoginRequiredMixin, TemplateView):
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # Ajoutez ici le contexte spécifique à la page d'accueil
-        return context
+        # Fournir les camions disponibles (statut DISPONIBLE) avec leur position actuelle
+        #qs = (Vidangeur.objects
+        #      .filter(actif=True, statut='DISPONIBLE')
+        #      .select_related('user'))
+        #available_trucks = []
+        #for v in qs:
+            # Utiliser la position actuelle si disponible
+            #if v.position_actuelle:
+                # Déterminer le type (mécanique / manuelle)
+                #is_mec = VidangeurMecanique.objects.filter(pk=v.pk).exists()
+                #available_trucks.append({
+                 #     'id': v.id,
+                 #     'name': v.user.get_full_name() or v.user.phone_number,
+                 #     'phone': v.user.phone_number,
+                 #     'type': 'MECANIQUE' if is_mec else 'MANUELLE',
+                 #     'latitude': v.latitude,
+                 #     'longitude': v.longitude,
+                 #     'last_update': v.date_derniere_localisation.isoformat() if v.date_derniere_localisation else None,
+                #})
+        #context['available_trucks'] = available_trucks
+        #return context
 
+        vm_qs_mec = VidangeurMecanique.objects.filter(actif=True)
+        vm_qs_man = VidangeurManuel.objects.filter(actif=True)
+
+        locs_mec = (
+            vm_qs_mec.select_related('user')
+                 .exclude(position_actuelle__isnull=True)
+        )
+        locs_man = (
+            vm_qs_man.select_related('user')
+                 .exclude(position_actuelle__isnull=True)
+        )
+
+        context['vidangeurs_geo_user'] = [
+            {
+                'id': v.id,
+                'name': v.user.get_full_name(),
+                'lat': v.latitude,
+                'lng': v.longitude,
+                'statut': v.statut,
+                'capacite': v.capacite,
+                'immatriculation': v.immatriculation,
+            }
+            for v in (list(locs_mec) + list(locs_man))
+        ]
+        context['available_trucks'] = context['vidangeurs_geo_user']
+        return context
 # Session-based endpoints for web (no JWT required)
 
 @login_required
@@ -277,7 +323,21 @@ def create_demande(request):
         return JsonResponse({'detail': "Seuls les usagers peuvent créer une demande."}, status=403)
 
     try:
-        data = json.loads(request.body.decode('utf-8') or '{}')
+        # Accept both JSON body and regular form POST
+        if request.content_type and 'application/json' in request.content_type:
+            data = json.loads(request.body.decode('utf-8') or '{}')
+        else:
+            data = {
+                'adresse': request.POST.get('adresse'),
+                'type_vidange': request.POST.get('type_vidange'),
+                'volume_estime': request.POST.get('volume_estime'),
+                'vidangeur_id': request.POST.get('vidangeur_id'),
+                'budget': request.POST.get('budget'),
+                'date_souhaitee': request.POST.get('date_souhaitee'),
+                'commentaire': request.POST.get('commentaire'),
+                'latitude': request.POST.get('latitude'),
+                'longitude': request.POST.get('longitude'),
+            }
     except Exception:
         data = {}
 
@@ -313,6 +373,16 @@ def create_demande(request):
     try:
         demande.full_clean(exclude=None)
         demande.save()
+        # If coordinates provided, set position
+        lat = data.get('latitude')
+        lng = data.get('longitude')
+        try:
+            if lat is not None and lng is not None and str(lat) != '' and str(lng) != '':
+                demande.set_position(float(lat), float(lng))
+                demande.save(update_fields=['position'])
+        except Exception:
+            # ignore invalid coordinates; demande stays without position
+            pass
     except Exception as e:
         return JsonResponse({'detail': str(e)}, status=400)
 
@@ -420,3 +490,16 @@ class ProprietaireVidangeursListView(LoginRequiredMixin, TemplateView):
         ]
 
         return context
+
+class RootRedirectView(View):
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        if user.is_authenticated:
+            role = getattr(user, 'role', '')
+            role_upper = role.upper() if isinstance(role, str) else ''
+            if role_upper == 'PROPRIETAIRE':
+                return redirect('ankavidangeapp:proprietaire_dashboard')
+            # Default authenticated landing for other roles
+            return redirect('ankavidangeapp:landing')
+        # Not authenticated: go to login
+        return redirect('ankavidangeapp:auth:login')

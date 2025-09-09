@@ -112,6 +112,12 @@ class Proprietaire(Profil):
     )
     date_verification = models.DateTimeField(_('date de vérification'), null=True, blank=True)
     notes_verification = models.TextField(_('notes de vérification'), blank=True)
+    TYPE_CHOICES = [
+        ('PERSONNE_PHYSIQUE', 'Personne physique'),
+        ('PERSONNE_MORALE', 'Personne morale'),
+    ]
+    type = models.CharField(_('type'), max_length=20, choices=TYPE_CHOICES, default='PERSONNE_PHYSIQUE')
+    numero_agrement = models.CharField(_('numéro d\'agrément'), null=True, blank=True, max_length=100)
 
     class Meta:
         verbose_name = _('propriétaire')
@@ -209,6 +215,8 @@ class VidangeurMecanique(Vidangeur):
     modele = models.CharField(_('modèle'), max_length=100, null=True, blank=True)
     annee = models.PositiveIntegerField(_('année de fabrication'), null=True, blank=True)
     capacite = models.PositiveIntegerField(_('capacité (en litres)'), null=True, blank=True)
+    stationnement = gis_models.PointField(_('position géographique'), srid=4326, null=True, blank=True)
+
     centres = models.ManyToManyField(
         'CentreVidange',
         through='TarifCentreVidange',
@@ -285,7 +293,6 @@ class TarifCentreVidange(models.Model):
 class Demande(models.Model):
     STATUT_CHOICES = [
         ('EN_ATTENTE', 'En attente'),
-        ('VALIDE', 'Validée'),
         ('EN_COURS', 'En cours'),
         ('TERMINEE', 'Terminée'),
         ('ANNULEE', 'Annulée'),
@@ -338,9 +345,6 @@ class Demande(models.Model):
     position = gis_models.PointField(_('position géographique'), srid=4326, null=True, blank=True)
     date_debut_intervention = models.DateTimeField(_('début intervention'), null=True, blank=True)
     date_fin_intervention = models.DateTimeField(_('fin intervention'), null=True, blank=True)
-    date_debut = models.DateTimeField(_('date début'), null=True, blank=True)
-    date_fin = models.DateTimeField(_('date fin'), null=True, blank=True)
-    volume_traite = models.PositiveIntegerField(_('volume traité (L)'), null=True, blank=True)
 
     class Meta:
         verbose_name = _('demande de vidange')
@@ -393,22 +397,24 @@ class Demande(models.Model):
 
     def set_position(self, latitude, longitude):
         self.position = Point(longitude, latitude)
+        self.save(update_fields=['position'])
 
     def demarrer_intervention(self):
-        if self.statut not in ['VALIDE', 'EN_ATTENTE']:
+        if self.statut not in ['EN_ATTENTE']:
             raise ValueError("Impossible de démarrer l'intervention avec le statut actuel")
-        
         self.statut = 'EN_COURS'
-        self.date_debut_intervention = timezone.now()
+        now = timezone.now()
+        self.date_debut_intervention = now
         self.save(update_fields=['statut', 'date_debut_intervention'])
 
     def terminer_intervention(self):
         if self.statut != 'EN_COURS':
             raise ValueError("Aucune intervention en cours à terminer")
-        
+        now = timezone.now()
         self.statut = 'TERMINEE'
-        self.date_fin_intervention = timezone.now()
+        self.date_fin_intervention = now
         self.save(update_fields=['statut', 'date_fin_intervention'])
+
     def accepter_par(self, vidangeur: 'Vidangeur'):
         if self.statut != 'EN_ATTENTE':
             raise ValidationError("Seules les demandes en attente peuvent être acceptées")
@@ -422,18 +428,15 @@ class Demande(models.Model):
             raise ValidationError("Le type du vidangeur ne correspond pas au type de vidange")
         self.vidangeur = vidangeur
         self.statut = 'EN_COURS'
-        self.date_debut = timezone.now()
-        self.save()
+        self.date_debut_intervention = timezone.now()
+        self.save(update_fields=['vidangeur', 'statut', 'date_debut_intervention'])
 
-    def terminer(self, volume_traite=None):
+    def terminer(self):
         if self.statut != 'EN_COURS':
             raise ValidationError("Seules les demandes en cours peuvent être terminées")
-        
         self.statut = 'TERMINEE'
-        self.date_fin = timezone.now()
-        if volume_traite:
-            self.volume_traite = volume_traite
-        self.save()
+        self.date_fin_intervention = timezone.now()
+        self.save(update_fields=['statut', 'date_fin_intervention'])
 
     def noter(self, note, commentaire=''):
         if self.statut != 'TERMINEE':

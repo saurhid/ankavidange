@@ -41,14 +41,16 @@ from ..api.serializers import (
     NotificationTestSerializer,
     OwnerTruckSerializer,
     OwnerDemandeSerializer,
+    OwnerProfileSerializer,
 )
 
 from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 
 from django.conf import settings
-from django.db.models import Min, Q, Sum
+from django.db.models import Min, Q, Sum, Count
 from django.db.models.functions import TruncDay, TruncWeek, TruncMonth
 from datetime import datetime
+from django.contrib.gis.geos import Point
 
 # Firebase Admin lazy init
 try:
@@ -67,6 +69,28 @@ except Exception:
     firebase_admin = None
     messaging = None
     _fcm_ready = False
+
+def send_fcm_to_user(user: User, title: str, body: str, data: dict | None = None) -> dict:
+    """Send an FCM notification to all active devices for a user.
+
+    Returns a dict with keys: sent(bool), success_count, failure_count, tokens(int)
+    """
+    try:
+        if not _fcm_ready or messaging is None:
+            return {'sent': False, 'success_count': 0, 'failure_count': 0, 'tokens': 0}
+        tokens = list(Device.objects.filter(user=user, is_active=True).values_list('token', flat=True))
+        if not tokens:
+            return {'sent': False, 'success_count': 0, 'failure_count': 0, 'tokens': 0}
+        msg = messaging.MulticastMessage(
+            notification=messaging.Notification(title=title, body=body),
+            data={str(k): str(v) for k, v in (data or {}).items()},
+            tokens=tokens,
+        )
+        resp = messaging.send_multicast(msg)
+        return {'sent': True, 'success_count': resp.success_count, 'failure_count': resp.failure_count, 'tokens': len(tokens)}
+    except Exception:
+        # Always swallow errors to not break primary flow
+        return {'sent': False, 'success_count': 0, 'failure_count': 0, 'tokens': 0}
 
 class APiRegisterView(APIView):
     permission_classes = [AllowAny]
@@ -338,9 +362,6 @@ class AcceptedDemandsView(APIView):
     def get(self, request, *args, **kwargs):
         vid = _get_vidangeur_for_user(request.user)
         qs = Demande.objects.filter(vidangeur=vid, statut='EN_COURS')
-        include = request.query_params.get('include')
-        if include and include.upper() == 'VALIDE':
-            qs = Demande.objects.filter(vidangeur=vid, statut__in=['EN_COURS', 'VALIDE'])
         data = DemandeSerializer(qs.order_by('-date_demande'), many=True).data
         return Response({'count': len(data), 'results': data})
 
@@ -360,6 +381,17 @@ class AcceptDemandView(APIView):
         # Optionally set vidangeur status to EN_MISSION
         vid.statut = 'EN_MISSION'
         vid.save(update_fields=['statut', 'date_maj'])
+        # Notify usager
+        try:
+            if demande.usager:
+                send_fcm_to_user(
+                    demande.usager,
+                    title="Votre demande a été acceptée",
+                    body=f"Le vidangeur a accepté la demande {demande.reference}",
+                    data={'demande_id': demande.id, 'status': 'EN_COURS'}
+                )
+        except Exception:
+            pass
         return Response(DemandeSerializer(demande).data, status=status.HTTP_200_OK)
 
 class CompleteDemandView(APIView):
@@ -371,14 +403,24 @@ class CompleteDemandView(APIView):
         demande = get_object_or_404(Demande.objects.select_for_update(), pk=pk)
         if demande.vidangeur_id != vid.id:
             return Response({'detail': "Vous n'êtes pas assigné à cette demande."}, status=status.HTTP_403_FORBIDDEN)
-        volume = request.data.get('volume_traite')
         try:
-            demande.terminer(volume)
+            demande.terminer()
         except Exception as e:
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         # Set vidangeur back to DISPONIBLE
         vid.statut = 'DISPONIBLE'
         vid.save(update_fields=['statut', 'date_maj'])
+        # Notify usager completion
+        try:
+            if demande.usager:
+                send_fcm_to_user(
+                    demande.usager,
+                    title="Demande terminée",
+                    body=f"La demande {demande.reference} est terminée.",
+                    data={'demande_id': demande.id, 'status': 'TERMINEE'}
+                )
+        except Exception:
+            pass
         return Response(DemandeSerializer(demande).data, status=status.HTTP_200_OK)
 
 class CancelDemandView(APIView):
@@ -390,7 +432,7 @@ class CancelDemandView(APIView):
         demande = get_object_or_404(Demande.objects.select_for_update(), pk=pk)
         if demande.vidangeur_id != vid.id:
             return Response({'detail': "Vous n'êtes pas assigné à cette demande."}, status=status.HTTP_403_FORBIDDEN)
-        if demande.statut not in ['EN_ATTENTE', 'EN_COURS', 'VALIDE']:
+        if demande.statut not in ['EN_ATTENTE', 'EN_COURS']:
             return Response({'detail': "Cette demande ne peut pas être annulée."}, status=status.HTTP_400_BAD_REQUEST)
         # Cancel
         demande.statut = 'ANNULEE'
@@ -401,6 +443,17 @@ class CancelDemandView(APIView):
         if hasattr(vid, 'statut') and vid.statut == 'EN_MISSION':
             vid.statut = 'DISPONIBLE'
             vid.save(update_fields=['statut', 'date_maj'])
+        # Notify usager cancellation
+        try:
+            if demande.usager:
+                send_fcm_to_user(
+                    demande.usager,
+                    title="Demande annulée",
+                    body=f"Votre demande {demande.reference} a été annulée.",
+                    data={'demande_id': demande.id, 'status': 'ANNULEE'}
+                )
+        except Exception:
+            pass
         return Response(DemandeSerializer(demande).data, status=status.HTTP_200_OK)
 
 class FCMRegisterView(APIView):
@@ -579,7 +632,7 @@ class DemandeCreateView(APIView):
         demande = Demande(
             usager=user,
             type_vidange=data['type_vidange'],
-            adresse=data['adresse'],
+            adresse=data.get('adresse') or '',
             volume_estime=data['volume_estime'],
             budget=data.get('budget'),
             date_souhaitee=data.get('date_souhaitee') or timezone.now(),
@@ -587,8 +640,27 @@ class DemandeCreateView(APIView):
             vidangeur=vid,
             statut='EN_ATTENTE',
         )
+        # Set position from optional coordinates
+        lat = data.get('latitude')
+        lng = data.get('longitude')
+        if lat is not None and lng is not None:
+            try:
+                demande.position = Point(float(lng), float(lat))
+            except Exception:
+                pass
         demande.full_clean(exclude=None)
         demande.save()
+        # Notify vidangeur of new demande
+        try:
+            if vid and getattr(vid, 'user', None):
+                send_fcm_to_user(
+                    vid.user,
+                    title="Nouvelle demande reçue",
+                    body=f"Demande {demande.reference} créée par {user.get_full_name()}",
+                    data={'demande_id': demande.id, 'reference': demande.reference or ''}
+                )
+        except Exception:
+            pass
         return Response(DemandeSerializer(demande).data, status=status.HTTP_201_CREATED)
 
 class IsProprietaire(permissions.BasePermission):
@@ -624,9 +696,13 @@ class OwnerDashboardView(APIView):
         trucks_qs = _owner_trucks_qs(user)
         truck_ids = list(trucks_qs.values_list('id', flat=True))
 
-        # Ongoing demandes: EN_COURS or EN_ATTENTE for these trucks
-        ongoing_qs = Demande.objects.filter(vidangeur_id__in=truck_ids, statut__in=['EN_COURS', 'EN_ATTENTE'])
+        # Ongoing demandes: EN_COURS for these trucks
+        ongoing_qs = Demande.objects.filter(vidangeur_id__in=truck_ids, statut='EN_COURS')
         ongoing_count = ongoing_qs.count()
+
+        # Finished demandes: TERMINEE for these trucks
+        finished_qs = Demande.objects.filter(vidangeur_id__in=truck_ids, statut='TERMINEE')
+        finished_count = finished_qs.count()
 
         # Income sum over optional date range (defaults last 30 days)
         to_dt = _parse_date(request.query_params.get('to')) or timezone.now()
@@ -634,13 +710,14 @@ class OwnerDashboardView(APIView):
         income = Demande.objects.filter(
             vidangeur_id__in=truck_ids,
             statut='TERMINEE',
-            date_fin__gte=from_dt,
-            date_fin__lte=to_dt,
+            date_fin_intervention__gte=from_dt,
+            date_fin_intervention__lte=to_dt,
         ).aggregate(total=Sum('budget'))['total'] or 0
 
         return Response({
             'trucks_count': trucks_qs.count(),
-            'ongoing_demandes': ongoing_count,
+            'en_cours': ongoing_count,
+            'terminees': finished_count,
             'income': float(income),
             'range': {'from': from_dt.isoformat(), 'to': to_dt.isoformat()},
         })
@@ -652,6 +729,17 @@ class OwnerTrucksView(APIView):
         qs = _owner_trucks_qs(request.user)
         data = OwnerTruckSerializer(qs, many=True).data
         return Response({'count': len(data), 'results': data})
+
+class OwnerProfileView(APIView):
+    """Return the profile information for the authenticated owner (propriétaire)."""
+    permission_classes = [IsAuthenticated, IsProprietaire]
+
+    def get(self, request, *args, **kwargs):
+        owner = getattr(request.user, 'proprietaire', None)
+        if owner is None:
+            return Response({'detail': 'Profil propriétaire introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+        data = OwnerProfileSerializer(owner).data
+        return Response(data)
 
 class OwnerDemandesView(APIView):
     permission_classes = [IsAuthenticated, IsProprietaire]
@@ -687,30 +775,72 @@ class OwnerRevenueView(APIView):
         trucks_qs = _owner_trucks_qs(request.user)
         truck_ids = list(trucks_qs.values_list('id', flat=True))
 
-        gran = (request.query_params.get('granularity') or 'daily').lower()
-        to_dt = _parse_date(request.query_params.get('to')) or timezone.now()
-        from_dt = _parse_date(request.query_params.get('from')) or (to_dt - timedelta(days=30))
-
-        qs = Demande.objects.filter(
+        # Only today's terminated demandes
+        today = timezone.localdate()
+        total = Demande.objects.filter(
             vidangeur_id__in=truck_ids,
             statut='TERMINEE',
-            date_fin__gte=from_dt,
-            date_fin__lte=to_dt,
-        )
+            date_fin_intervention__date=today,
+        ).aggregate(total=Sum('budget'))['total'] or 0
 
-        if gran == 'daily':
-            trunc = TruncDay('date_fin')
-        elif gran == 'weekly':
-            trunc = TruncWeek('date_fin')
-        else:
-            trunc = TruncMonth('date_fin')
+        return Response({'sum': float(total)})
 
-        agg = qs.annotate(period=trunc).values('period').order_by('period').annotate(total=Sum('budget'))
-        results = [{'period': r['period'].date().isoformat(), 'total': float(r['total'] or 0)} for r in agg]
+class OwnerVidangeurDemandesStatsView(APIView):
+    """Return per-vidangeur counts of demandes (EN_COURS and TERMINEE) for current owner.
 
-        return Response({
-            'granularity': gran,
-            'range': {'from': from_dt.isoformat(), 'to': to_dt.isoformat()},
-            'points': results,
-            'sum': float(sum(r['total'] for r in results)),
-        })
+    Response:
+    {
+      "count": <int>,
+      "summary": {"en_cours": int, "terminees": int, "total": int},
+      "results": [
+        {
+          "vidangeur_id": int,
+          "name": str,
+          "phone": str,
+          "immatriculation": str | null,
+          "marque": str | null,
+          "modele": str | null,
+          "capacite": int | null,
+          "statut": str,
+          "en_cours": int,
+          "terminees": int,
+          "total": int
+        }, ...
+      ]
+    }
+    """
+    permission_classes = [IsAuthenticated, IsProprietaire]
+
+    def get(self, request, *args, **kwargs):
+        trucks_qs = _owner_trucks_qs(request.user)
+        # Annotate counts of demandes by status using conditional Count
+        qs = trucks_qs.annotate(
+            en_cours_count=Count('demandes', filter=Q(demandes__statut='EN_COURS')),
+            terminees_count=Count('demandes', filter=Q(demandes__statut='TERMINEE')),
+        ).select_related('user')
+
+        results = []
+        for v in qs:
+            en_cours_v = int(getattr(v, 'en_cours_count', 0) or 0)
+            terminees_v = int(getattr(v, 'terminees_count', 0) or 0)
+            results.append({
+                'vidangeur_id': v.id,
+                'name': v.user.get_full_name(),
+                'phone': v.user.phone_number,
+                'immatriculation': getattr(v, 'immatriculation', None),
+                'marque': getattr(v, 'marque', None),
+                'modele': getattr(v, 'modele', None),
+                'capacite': getattr(v, 'capacite', None),
+                'statut': getattr(v, 'statut', None),
+                'en_cours': en_cours_v,
+                'terminees': terminees_v,
+                'total': en_cours_v + terminees_v,
+            })
+
+        # Overall summary across all trucks for this owner
+        truck_ids = list(trucks_qs.values_list('id', flat=True))
+        en_cours_total = Demande.objects.filter(vidangeur_id__in=truck_ids, statut='EN_COURS').count()
+        terminees_total = Demande.objects.filter(vidangeur_id__in=truck_ids, statut='TERMINEE').count()
+        total_all = en_cours_total + terminees_total
+
+        return Response({'count': len(results), 'summary': {'en_cours': en_cours_total, 'terminees': terminees_total, 'total': total_all}, 'results': results})
