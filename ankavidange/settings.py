@@ -203,6 +203,10 @@ SESSION_SAVE_EVERY_REQUEST = True
 SESSION_COOKIE_SECURE = True  # For HTTPS
 SESSION_COOKIE_HTTPONLY = True
 
-# Firebase Admin credentials path (JSON service account)
-# Set env var FIREBASE_CREDENTIALS_PATH to the absolute path of your service account JSON
-FIREBASE_CREDENTIALS_PATH = os.getenv('C:/Users/Sauri/vidange_master/Ankavidange/ankavidange-fb4d0e7f6a74.json')
+"""
+Firebase Admin credentials path (JSON service account)
+Set env var FIREBASE_CREDENTIALS_PATH to the absolute path of your service account JSON.
+If not set, we'll try to use the local file `ankavidange-fb4d0e7f6a74.json` in the project root if it exists.
+"""
+DEFAULT_FIREBASE_JSON = os.path.join(BASE_DIR, 'ankavidange-fb4d0e7f6a74.json')
+FIREBASE_CREDENTIALS_PATH = os.getenv('FIREBASE_CREDENTIALS_PATH', DEFAULT_FIREBASE_JSON if os.path.isfile(DEFAULT_FIREBASE_JSON) else None)

@@ -17,6 +17,7 @@ from django.views import View
 import json
 
 from .models import PositionGPS, Vidangeur, Demande, Notification, User, VidangeurMecanique, VidangeurManuel
+from .api.views import send_fcm_to_user
 
 class ProprietaireRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
     login_url = 'ankavidangeapp:auth:login'
@@ -382,6 +383,18 @@ def create_demande(request):
                 demande.save(update_fields=['position'])
         except Exception:
             # ignore invalid coordinates; demande stays without position
+            pass
+        # Notify the assigned vidangeur via FCM
+        try:
+            if vid and getattr(vid, 'user', None):
+                send_fcm_to_user(
+                    vid.user,
+                    title="Nouvelle demande reçue",
+                    body=f"Demande {demande.reference} créée par {user.get_full_name()}",
+                    data={'demande_id': demande.id, 'reference': demande.reference or ''}
+                )
+        except Exception:
+            # Do not break the flow if notification fails
             pass
     except Exception as e:
         return JsonResponse({'detail': str(e)}, status=400)
