@@ -47,6 +47,8 @@ from ..api.serializers import (
 from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 
 from django.conf import settings
+import logging
+
 from django.db.models import Min, Q, Sum, Count
 from django.db.models.functions import TruncDay, TruncWeek, TruncMonth
 from datetime import datetime
@@ -70,6 +72,62 @@ except Exception:
     messaging = None
     _fcm_ready = False
 
+logger = logging.getLogger(__name__)
+
+def _send_multicast_compat(tokens, title, body, data_dict):
+    """Send notifications to multiple tokens using send_multicast if available; otherwise use send_all.
+ 
+    Returns a BatchResponse-like object with .success_count, .failure_count, and .responses.
+    """
+    if not tokens:
+        raise ValueError("No tokens provided")
+    data_str = {str(k): str(v) for k, v in (data_dict or {}).items()}
+    notification = messaging.Notification(title=title, body=body)
+    # Prefer modern API when available
+    if hasattr(messaging, 'send_multicast') and hasattr(messaging, 'MulticastMessage'):
+        msg = messaging.MulticastMessage(
+            notification=notification,
+            data=data_str,
+            tokens=tokens,
+        )
+        return messaging.send_multicast(msg)
+    # Fallbacks for older firebase_admin
+    messages = [
+        messaging.Message(
+            notification=notification,
+            data=data_str,
+            token=t,
+        )
+        for t in tokens
+    ]
+    if hasattr(messaging, 'send_all'):
+        return messaging.send_all(messages)
+    if hasattr(messaging, 'send_each'):
+        return messaging.send_each(messages)
+    # Final fallback: send sequentially and synthesize a BatchResponse-like object
+    responses = []
+    success_count = 0
+    failure_count = 0
+    for msg in messages:
+        try:
+            messaging.send(msg)
+            class _Resp: pass
+            r = _Resp(); r.success = True; r.exception = None
+            responses.append(r)
+            success_count += 1
+        except Exception as ex:
+            class _Resp: pass
+            r = _Resp(); r.success = False; r.exception = ex
+            responses.append(r)
+            failure_count += 1
+    class _Batch:
+        pass
+    batch = _Batch()
+    batch.responses = responses
+    batch.success_count = success_count
+    batch.failure_count = failure_count
+    return batch
+
 def send_fcm_to_user(user: User, title: str, body: str, data: dict | None = None) -> dict:
     """Send an FCM notification to all active devices for a user.
 
@@ -77,20 +135,27 @@ def send_fcm_to_user(user: User, title: str, body: str, data: dict | None = None
     """
     try:
         if not _fcm_ready or messaging is None:
-            return {'sent': False, 'success_count': 0, 'failure_count': 0, 'tokens': 0}
+            return {'sent': False, 'success_count': 0, 'failure_count': 0, 'tokens': 0, 'detail': 'fcm_not_initialized'}
         tokens = list(Device.objects.filter(user=user, is_active=True).values_list('token', flat=True))
+        # Legacy fallback to user.fcm_token if Devices table is empty for this user
+        if getattr(user, 'fcm_token', None) and user.fcm_token not in tokens:
+            tokens.append(user.fcm_token)
         if not tokens:
-            return {'sent': False, 'success_count': 0, 'failure_count': 0, 'tokens': 0}
-        msg = messaging.MulticastMessage(
-            notification=messaging.Notification(title=title, body=body),
-            data={str(k): str(v) for k, v in (data or {}).items()},
-            tokens=tokens,
-        )
-        resp = messaging.send_multicast(msg)
-        return {'sent': True, 'success_count': resp.success_count, 'failure_count': resp.failure_count, 'tokens': len(tokens)}
-    except Exception:
+            return {'sent': False, 'success_count': 0, 'failure_count': 0, 'tokens': 0, 'detail': 'no_tokens'}
+        resp = _send_multicast_compat(tokens, title, body, data)
+        # Deactivate invalid tokens
+        deactivated = 0
+        for idx, r in enumerate(resp.responses):
+            if not r.success:
+                err = getattr(r.exception, 'code', '')
+                if err in ('registration-token-not-registered', 'invalid-argument'):
+                    Device.objects.filter(token=tokens[idx]).update(is_active=False)
+                    deactivated += 1
+        return {'sent': True, 'success_count': resp.success_count, 'failure_count': resp.failure_count, 'tokens': len(tokens), 'deactivated': deactivated}
+    except Exception as e:
+        logger.exception("FCM send failed: %s", e)
         # Always swallow errors to not break primary flow
-        return {'sent': False, 'success_count': 0, 'failure_count': 0, 'tokens': 0}
+        return {'sent': False, 'success_count': 0, 'failure_count': 0, 'tokens': 0, 'detail': 'exception'}
 
 class APiRegisterView(APIView):
     permission_classes = [AllowAny]
@@ -520,19 +585,14 @@ class FCMTestView(APIView):
             # Simulate success in non-configured environments
             return Response({'sent': False, 'detail': 'FCM non initialisé côté serveur. Configurez FIREBASE_CREDENTIALS_PATH.', 'tokens': len(tokens)}, status=status.HTTP_200_OK)
 
-        # Send multicast
-        message = messaging.MulticastMessage(
-            notification=messaging.Notification(title=title, body=body),
-            data={str(k): str(v) for k, v in (data or {}).items()},
-            tokens=tokens,
-        )
-        response_msg = messaging.send_multicast(message)
+        # Send multicast (with fallback for older firebase_admin)
+        response_msg = _send_multicast_compat(tokens, title, body, data)
 
         # Deactivate invalid tokens
         deactivated = 0
-        for idx, resp in enumerate(response_msg.responses):
-            if not resp.success:
-                err = getattr(resp.exception, 'code', '')
+        for idx, r in enumerate(response_msg.responses):
+            if not r.success:
+                err = getattr(r.exception, 'code', '')
                 if err in ('registration-token-not-registered', 'invalid-argument'):
                     Device.objects.filter(token=tokens[idx]).update(is_active=False)
                     deactivated += 1

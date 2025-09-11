@@ -6,7 +6,8 @@ from django.contrib import messages
 from django.views.generic import TemplateView, CreateView
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django import forms
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
+from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta
 from django.db.models import Count, Sum, Q, Max, OuterRef, Subquery, F
@@ -258,7 +259,6 @@ class LandingPageView(LoginRequiredMixin, TemplateView):
         ]
         context['available_trucks'] = context['vidangeurs_geo_user']
         return context
-# Session-based endpoints for web (no JWT required)
 
 @login_required
 @require_http_methods(["GET"])
@@ -313,7 +313,6 @@ def search_vidangeurs(request):
             })
 
     return JsonResponse({'count': len(results), 'results': results}, status=200)
-
 
 @login_required
 @require_POST
@@ -371,6 +370,7 @@ def create_demande(request):
         vidangeur=vid,
         statut='EN_ATTENTE',
     )
+    fcm_result = None
     try:
         demande.full_clean(exclude=None)
         demande.save()
@@ -384,14 +384,22 @@ def create_demande(request):
         except Exception:
             # ignore invalid coordinates; demande stays without position
             pass
-        # Notify the assigned vidangeur via FCM
+        # Notify the assigned vidangeur via FCM (best-effort)
         try:
             if vid and getattr(vid, 'user', None):
-                send_fcm_to_user(
+                accept_url = request.build_absolute_uri(reverse('api:demand_accept', args=[demande.id]))
+                refuse_url = request.build_absolute_uri(reverse('api:demand_cancel', args=[demande.id]))
+                fcm_result = send_fcm_to_user(
                     vid.user,
                     title="Nouvelle demande reçue",
-                    body=f"Demande {demande.reference} créée par {user.get_full_name()}",
-                    data={'demande_id': demande.id, 'reference': demande.reference or ''}
+                    body=f"Demande {demande.reference} {demande.type_vidange}",
+                    data={
+                        'demande_id': demande.id,
+                        'reference': demande.reference or '',
+                        'category': 'DEMANDE_ACTIONS',
+                        'accept_url': accept_url,
+                        'refuse_url': refuse_url,
+                    }
                 )
         except Exception:
             # Do not break the flow if notification fails
@@ -399,14 +407,16 @@ def create_demande(request):
     except Exception as e:
         return JsonResponse({'detail': str(e)}, status=400)
 
-    return JsonResponse({
+    resp = {
         'id': demande.id,
         'reference': demande.reference,
         'statut': demande.statut,
         'type_vidange': demande.type_vidange,
         'date_demande': demande.date_demande.isoformat(),
-    }, status=201)
-
+    }
+    if getattr(settings, 'DEBUG', False):
+        resp['fcm'] = fcm_result
+    return JsonResponse(resp, status=201)
 
 @login_required
 @require_http_methods(["GET"])

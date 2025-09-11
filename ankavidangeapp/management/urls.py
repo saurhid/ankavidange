@@ -35,4 +35,7 @@ urlpatterns = [
     path('requests/<int:pk>/update-status/', 
          views.update_request_status, 
          name='update_request_status'),
+    path('requests/<int:pk>/delete/', 
+         views.delete_request, 
+         name='request_delete'),
 ]

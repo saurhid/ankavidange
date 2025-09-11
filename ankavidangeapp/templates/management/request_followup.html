@@ -198,9 +198,12 @@
                                     </li>
                                     <li><hr class="dropdown-divider"></li>
                                     <li>
-                                        <a class="dropdown-item text-danger" href="#">
-                                            <i class="fas fa-trash-alt me-2"></i>Supprimer
-                                        </a>
+                                        <form method="post" action="{% url 'management:request_delete' request.id %}" onsubmit="return confirm('Supprimer définitivement la demande #{{ request.id }} ?');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="dropdown-item text-danger">
+                                                <i class="fas fa-trash-alt me-2"></i>Supprimer
+                                            </button>
+                                        </form>
                                     </li>
                                 </ul>
                             </div>
@@ -337,8 +340,9 @@ document.addEventListener('DOMContentLoaded', function() {
             var currentStatus = button.getAttribute('data-current-status');
             var form = document.getElementById('updateStatusForm');
             
-            // Update form action URL with the request ID
-            form.action = form.action.replace('/0/', '/' + requestId + '/');
+            // Update form action URL with the request ID (reset to base on each show)
+            if (!form.dataset.baseAction) { form.dataset.baseAction = form.action; }
+            form.action = form.dataset.baseAction.replace('/0/', '/' + requestId + '/');
             
             // Set current status as selected
             var statusSelect = document.getElementById('newStatus');

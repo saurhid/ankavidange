@@ -278,21 +278,38 @@ class RequestDetailView(StaffRequiredMixin, DetailView):
         context['title'] = f'Détails de la demande #{self.object.id}'
         return context
 
-def update_request_status(request, pk, status):
+def update_request_status(request, pk):
     if not request.user.is_staff:
         return redirect('management:dashboard')
-    
+    if request.method != 'POST':
+        messages.error(request, 'Méthode non autorisée.')
+        return redirect('management:request_detail', pk=pk)
+
     demande = get_object_or_404(Demande, pk=pk)
     old_status = demande.get_statut_display()
-    
-    if status in dict(Demande.STATUT_CHOICES):
-        demande.statut = status
-        demande.save()
+    new_status = request.POST.get('status')
+
+    if new_status in dict(Demande.STATUT_CHOICES):
+        demande.statut = new_status
+        demande.save(update_fields=['statut', 'date_maj'])
         messages.success(request, f'Le statut de la demande #{demande.id} a été mis à jour de "{old_status}" à "{demande.get_statut_display()}"')
     else:
         messages.error(request, 'Statut invalide')
-    
+
     return redirect('management:request_detail', pk=pk)
+
+def delete_request(request, pk):
+    if not request.user.is_staff:
+        return redirect('management:dashboard')
+    if request.method != 'POST':
+        messages.error(request, 'Méthode non autorisée.')
+        return redirect('management:request_detail', pk=pk)
+
+    demande = get_object_or_404(Demande, pk=pk)
+    demande_id = demande.id
+    demande.delete()
+    messages.success(request, f"Demande #{demande_id} supprimée avec succès.")
+    return redirect('management:request_followup')
 
 class UserCreateForm(forms.ModelForm):
     password1 = forms.CharField(label='Mot de passe', widget=forms.PasswordInput, required=True)
