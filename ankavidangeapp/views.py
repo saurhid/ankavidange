@@ -392,10 +392,13 @@ def create_demande(request):
                 fcm_result = send_fcm_to_user(
                     vid.user,
                     title="Nouvelle demande reçue",
-                    body=f"Demande {demande.reference} {demande.type_vidange}",
+                    body=f"Demande {demande.reference}",
                     data={
                         'demande_id': demande.id,
                         'reference': demande.reference or '',
+                        'type': demande.type_vidange,
+                        'budget': demande.budget,
+                        'adresse': demande.adresse,
                         'category': 'DEMANDE_ACTIONS',
                         'accept_url': accept_url,
                         'refuse_url': refuse_url,
