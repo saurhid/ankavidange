@@ -296,10 +296,10 @@
                                 <div class="mb-3">
                                     <label for="montant_propose" class="form-label">Budget: <span id="montantValue">45 000</span> FCFA</label>
                                     <div class="d-flex align-items-center">
-                                        <span class="me-2" style="min-width: 50px;">30k</span>
+                                        <span class="me-2" style="min-width: 50px;">10k</span>
                                         <input type="range" class="form-range" id="montant_propose" 
-                                               name="montant_propose" min="30000" max="60000" step="5000" 
-                                               value="45000" oninput="updateMontantValue(this.value)">
+                                               name="montant_propose" min="10000" max="60000" step="5000" 
+                                               value="35000" oninput="updateMontantValue(this.value)">
                                         <span class="ms-2" style="min-width: 50px;">60k</span>
                                     </div>
                                 </div>
@@ -308,8 +308,9 @@
                                 <div class="mb-3">
                                     <label for="volume_estime" class="form-label">Volume estimé *</label>
                                     <select class="form-select" id="volume_estime" name="volume_estime" required>
-                                        <option value="SIMPLE">Simple</option>
-                                        <option value="GRANDE">Grande</option>
+                                        <option value="PETIT">Petit</option>
+                                        <option value="MOYEN">Moyen</option>
+                                        <option value="GRAND">Grand</option>
                                     </select>
                                 </div>
                             </div>

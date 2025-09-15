@@ -240,13 +240,32 @@ class DemandeCreateSerializer(serializers.Serializer):
 
 class FCMRegisterSerializer(serializers.Serializer):
     token = serializers.CharField(max_length=255)
-    platform = serializers.ChoiceField(choices=Device.Platform.choices)
+    # Accept platform as free text and normalize ourselves to be case-insensitive
+    platform = serializers.CharField()
     app_version = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
+    VALID_PLATFORMS = {c[0] for c in Device.Platform.choices}
+
+    def to_internal_value(self, data):
+        # Allow client to send 'appVersion' (camelCase)
+        if isinstance(data, dict) and 'appVersion' in data and 'app_version' not in data:
+            data = {**data, 'app_version': data.get('appVersion')}
+        return super().to_internal_value(data)
+
     def validate_token(self, value):
+        value = (value or '').strip()
         if not value or len(value) < 10:
-            raise serializers.ValidationError('Token FCM invalide')
+            raise serializers.ValidationError('Token FCM invalide (trop court)')
         return value
+
+    def validate_platform(self, value):
+        norm = str(value or '').strip().upper()
+        # Common synonyms
+        if norm in ['ANDROID', 'IOS', 'WEB']:
+            return norm
+        raise serializers.ValidationError(
+            f"Plateforme invalide. Utilisez l'une des valeurs: {', '.join(sorted(self.VALID_PLATFORMS))}"
+        )
 
 class FCMTokenSerializer(serializers.Serializer):
     token = serializers.CharField(max_length=255)
@@ -319,3 +338,14 @@ class OwnerProfileSerializer(serializers.ModelSerializer):
             'role': u.role,
             'date_joined': u.date_joined,
         }
+
+class DeviceSerializer(serializers.ModelSerializer):
+    user_phone = serializers.CharField(source='user.phone_number', read_only=True)
+
+    class Meta:
+        model = Device
+        fields = [
+            'id', 'user', 'user_phone', 'platform', 'token', 'app_version',
+            'is_active', 'last_seen', 'created_at', 'updated_at'
+        ]
+        read_only_fields = fields

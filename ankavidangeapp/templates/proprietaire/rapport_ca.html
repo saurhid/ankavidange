@@ -1,0 +1,141 @@
+{% extends 'proprietaire/base_proprietaire.html' %}
+{% load static %}
+
+{% block title %}Rapport - Chiffre d'affaires{% endblock %}
+
+{% block extra_css %}
+<style>
+  .stat-card {
+    border-radius: 10px;
+    border: none;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  }
+</style>
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="d-flex justify-content-between flex-wrap align-items-center pt-2 pb-3 mb-4 border-bottom">
+  <h1 class="h3 mb-0">Rapport — Chiffre d'affaires</h1>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <form class="row g-2" method="get">
+      <div class="col-sm-4 col-md-3">
+        <label class="form-label">Date de début</label>
+        <input type="date" class="form-control" name="start" value="{{ start_date|date:'Y-m-d' }}">
+      </div>
+      <div class="col-sm-4 col-md-3">
+        <label class="form-label">Date de fin</label>
+        <input type="date" class="form-control" name="end" value="{{ end_date|date:'Y-m-d' }}">
+      </div>
+      <div class="col-sm-4 col-md-3 d-flex align-items-end">
+        <button type="submit" class="btn btn-primary w-100"><i class="fas fa-filter me-1"></i> Filtrer</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-4">
+    <div class="card stat-card">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-muted">Total chiffre d'affaires</div>
+            <div class="display-6">{{ total_ca|floatformat:0 }} <small class="text-muted">FCFA</small></div>
+          </div>
+          <div class="bg-warning bg-opacity-10 p-3 rounded-3">
+            <i class="fas fa-coins text-warning" style="font-size: 1.5rem;"></i>
+          </div>
+        </div>
+        <div class="text-muted mt-2">Période: {{ start_date|date:'d/m/Y' }} — {{ end_date|date:'d/m/Y' }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-8">
+    <div class="card stat-card h-100">
+      <div class="card-body">
+        <h6 class="mb-3">Évolution quotidienne</h6>
+        <canvas id="caChart" height="120"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <h6 class="mb-3">Détail par jour</h6>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead>
+          <tr>
+            <th>Jour</th>
+            <th class="text-end">Montant (FCFA)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.finish_date|date:'d/m/Y' }}</td>
+            <td class="text-end">{{ row.total|floatformat:0 }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="2" class="text-center text-muted py-3">Aucune donnée pour la période sélectionnée.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{{ chart.labels|json_script:"ca-labels" }}
+{{ chart.data|json_script:"ca-data" }}
+<script>
+  (function(){
+    const ctx = document.getElementById('caChart');
+    if (!ctx) return;
+    const labels = JSON.parse(document.getElementById('ca-labels').textContent || '[]');
+    const data = JSON.parse(document.getElementById('ca-data').textContent || '[]');
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: "Chiffre d'affaires (FCFA)",
+          data: data,
+          borderColor: '#FF9F00',
+          backgroundColor: 'rgba(255,159,0,0.15)',
+          tension: 0.25,
+          fill: true,
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: {
+            ticks: { callback: (v) => new Intl.NumberFormat('fr-FR').format(v) }
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function(ctx){
+                const val = ctx.parsed.y || 0;
+                return new Intl.NumberFormat('fr-FR').format(val) + ' FCFA';
+              }
+            }
+          }
+        }
+      }
+    });
+  })();
+</script>
+{% endblock %}

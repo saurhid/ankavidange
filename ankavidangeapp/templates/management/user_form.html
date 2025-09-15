@@ -124,13 +124,9 @@
             <label class="form-label">Tarif (FCFA) — Vidangeur manuel</label>
             {{ form.tarif_manuel|add_class:"form-control" }}
           </div>
-          <div class="col-md-3">
-            <label class="form-label">Stationnement latitude</label>
-            {{ form.stationnement_lat|add_class:"form-control" }}
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Stationnement longitude</label>
-            {{ form.stationnement_lng|add_class:"form-control" }}
+          <div class="col-md-6">
+            <label class="form-label">Stationnement</label>
+            {{ form.stationnement|add_class:"form-select" }}
           </div>
         </div>
       </div>

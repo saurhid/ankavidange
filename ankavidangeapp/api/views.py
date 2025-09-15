@@ -42,8 +42,8 @@ from ..api.serializers import (
     OwnerTruckSerializer,
     OwnerDemandeSerializer,
     OwnerProfileSerializer,
+    DeviceSerializer,
 )
-
 from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 
 from django.conf import settings
@@ -743,7 +743,6 @@ def _owner_trucks_qs(user):
     # Only mechanical trucks tied to this proprietor
     return VidangeurMecanique.objects.filter(proprietaire__user=user).select_related('user')
 
-
 class OwnerPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = 'page_size'
@@ -904,3 +903,53 @@ class OwnerVidangeurDemandesStatsView(APIView):
         total_all = en_cours_total + terminees_total
 
         return Response({'count': len(results), 'summary': {'en_cours': en_cours_total, 'terminees': terminees_total, 'total': total_all}, 'results': results})
+
+class DeviceListPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+class DeviceListView(APIView):
+    """List FCM registered devices.
+
+    - Admin/staff: can see all devices.
+    - Non-admin: limited to their own devices.
+
+    Filters via query params:
+    - active: true/false
+    - platform: ANDROID/IOS/WEB
+    - user_id: only for staff
+    - search: substring in token
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        qs = Device.objects.select_related('user').all()
+
+        # Restrict non-staff to own devices
+        if not request.user.is_staff:
+            qs = qs.filter(user=request.user)
+
+        # Filters
+        active = request.query_params.get('active')
+        if active is not None:
+            val = str(active).lower()
+            if val in ['true', '1', 'yes']:
+                qs = qs.filter(is_active=True)
+            elif val in ['false', '0', 'no']:
+                qs = qs.filter(is_active=False)
+        platform = request.query_params.get('platform')
+        if platform:
+            qs = qs.filter(platform=platform)
+        if request.user.is_staff:
+            user_id = request.query_params.get('user_id')
+            if user_id:
+                qs = qs.filter(user_id=user_id)
+        search = request.query_params.get('search')
+        if search:
+            qs = qs.filter(token__icontains=search)
+
+        paginator = DeviceListPagination()
+        page = paginator.paginate_queryset(qs.order_by('-updated_at'), request)
+        serializer = DeviceSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)

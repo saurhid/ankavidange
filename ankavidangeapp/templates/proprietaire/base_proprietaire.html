@@ -33,7 +33,6 @@
         <div class="container">
             <a class="navbar-brand" href="{% url 'ankavidangeapp:proprietaire_dashboard' %}">
                 <div class="d-flex align-items-center">
-                    <img src="" alt="Logo" class="logo">
                     <span class="fw-bold ms-2">An ka Vidange</span>
                 </div>
             </a>
@@ -41,19 +40,26 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link active" href="{% url 'ankavidangeapp:proprietaire_dashboard' %}">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'proprietaire_dashboard' %}active{% endif %}" href="{% url 'ankavidangeapp:proprietaire_dashboard' %}">
                             <i class="fas fa-tachometer-alt me-1"></i> Tableau de bord
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'ankavidangeapp:proprietaire_vidangeurs' %}">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'proprietaire_vidangeurs' %}active{% endif %}" href="{% url 'ankavidangeapp:proprietaire_vidangeurs' %}">
                             <i class="fas fa-truck me-1"></i> Vidangeurs
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.resolver_match.url_name == 'proprietaire_rapport_ca' %}active{% endif %}" href="#" id="rapportsDropdown" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-chart-bar me-1"></i> Rapports
                         </a>
+                        <ul class="dropdown-menu">
+                            <li>
+                                <a class="dropdown-item {% if request.resolver_match.url_name == 'proprietaire_rapport_ca' %}active{% endif %}" href="{% url 'ankavidangeapp:proprietaire_rapport_ca' %}">
+                                    <i class="fas fa-coins me-2"></i> Chiffre d'affaires
+                                </a>
+                            </li>
+                        </ul>
                     </li>
                 </ul>
                 <ul class="navbar-nav ms-auto">

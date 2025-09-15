@@ -1,0 +1,168 @@
+{% extends 'management/base.html' %}
+{% load static %}
+
+{% block title %}Profil - {{ block.super }}{% endblock %}
+{% block page_title %}Profil de {{ user_obj.get_full_name|default:user_obj.phone_number }}{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="card-title mb-3">Informations utilisateur</h5>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="text-muted">Nom complet</div>
+            <div class="fw-semibold">{{ user_obj.get_full_name|default:'—' }}</div>
+          </div>
+          <div class="col-md-6">
+            <div class="text-muted">Rôle</div>
+            <div class="fw-semibold">{{ user_obj.get_role_display }}</div>
+          </div>
+          <div class="col-md-6">
+            <div class="text-muted">Téléphone</div>
+            <div class="fw-semibold">{{ user_obj.phone_number|default:'—' }}</div>
+          </div>
+          <div class="col-md-6">
+            <div class="text-muted">Email</div>
+            <div class="fw-semibold">{{ user_obj.email|default:'—' }}</div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-muted">Actif</div>
+            <div>
+              {% if user_obj.is_active %}<span class="badge bg-success">Actif</span>{% else %}<span class="badge bg-secondary">Inactif</span>{% endif %}
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-muted">Staff</div>
+            <div>
+              {% if user_obj.is_staff %}<span class="badge bg-primary">Admin</span>{% else %}<span class="badge bg-light text-dark">Non</span>{% endif %}
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-muted">Date d'inscription</div>
+            <div class="fw-semibold">{{ user_obj.date_joined|date:'d/m/Y H:i' }}</div>
+          </div>
+          <div class="col-md-6">
+            <div class="text-muted">Dernière connexion</div>
+            <div class="fw-semibold">{{ user_obj.last_login|default:'—' }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% if user_obj.proprietaire_profile %}
+    <div class="card shadow-sm mt-3">
+      <div class="card-body">
+        <h5 class="card-title mb-3">Profil Propriétaire</h5>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="text-muted">Société</div>
+            <div class="fw-semibold">{{ user_obj.proprietaire_profile.nom_societe }}</div>
+          </div>
+          <div class="col-md-6">
+            <div class="text-muted">Contact</div>
+            <div class="fw-semibold">{{ user_obj.proprietaire_profile.contact }}</div>
+          </div>
+          <div class="col-md-6">
+            <div class="text-muted">Type</div>
+            <div class="fw-semibold">{{ user_obj.proprietaire_profile.get_type_display|default:'—' }}</div>
+          </div>
+          <div class="col-md-6">
+            <div class="text-muted">N° d'agrément</div>
+            <div class="fw-semibold">{{ user_obj.proprietaire_profile.numero_agrement|default:'—' }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if user_obj.vidangeur %}
+    <div class="card shadow-sm mt-3">
+      <div class="card-body">
+        <h5 class="card-title mb-3">Profil Vidangeur</h5>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <div class="text-muted">Statut</div>
+            <div class="fw-semibold">{{ user_obj.vidangeur.get_statut_display }}</div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-muted">Actif</div>
+            <div>{% if user_obj.vidangeur.actif %}<span class="badge bg-success">Actif</span>{% else %}<span class="badge bg-secondary">Inactif</span>{% endif %}</div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-muted">Stationnement</div>
+            <div class="fw-semibold">{{ user_obj.vidangeur.stationnement.nom|default:'—' }}</div>
+          </div>
+        </div>
+
+        {% with vm=user_obj.vidangeur.vidangeurmecanique %}
+        {% if vm %}
+        <hr>
+        <h6 class="mb-2">Détails Mécanique</h6>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <div class="text-muted">Immatriculation</div>
+            <div class="fw-semibold">{{ vm.immatriculation }}</div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-muted">Permis</div>
+            <div class="fw-semibold">{{ vm.numero_permis }}</div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-muted">Capacité (L)</div>
+            <div class="fw-semibold">{{ vm.capacite|default:'—' }}</div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-muted">Marque</div>
+            <div class="fw-semibold">{{ vm.marque|default:'—' }}</div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-muted">Modèle</div>
+            <div class="fw-semibold">{{ vm.modele|default:'—' }}</div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-muted">Année</div>
+            <div class="fw-semibold">{{ vm.annee|default:'—' }}</div>
+          </div>
+        </div>
+        <div class="mt-3">
+          <a class="btn btn-outline-primary btn-sm" href="{% url 'management:vidangeur_tarifs' pk=vm.pk %}"><i class="fas fa-money-bill me-1"></i> Gérer les tarifs</a>
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        {% with vman=user_obj.vidangeur.vidangeurmanuel %}
+        {% if vman %}
+        <hr>
+        <h6 class="mb-2">Détails Manuelle</h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="text-muted">Tarif (FCFA)</div>
+            <div class="fw-semibold">{{ vman.tarif_manuel|default:'—' }}</div>
+          </div>
+        </div>
+        {% endif %}
+        {% endwith %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h6 class="card-title">Actions</h6>
+        <div class="d-grid gap-2">
+          <a class="btn btn-primary" href="{% url 'management:user_edit' pk=user_obj.pk %}"><i class="fas fa-pen me-1"></i> Modifier</a>
+          <a class="btn btn-outline-secondary" href="{% url 'management:user_management' %}"><i class="fas fa-arrow-left me-1"></i> Retour à la liste</a>
+          <form method="post" action="{% url 'management:user_delete' pk=user_obj.pk %}" onsubmit="return confirm('Supprimer cet utilisateur ?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-danger"><i class="fas fa-trash me-1"></i> Supprimer</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

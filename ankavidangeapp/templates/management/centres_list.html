@@ -18,6 +18,7 @@
             <th>Nom</th>
             <th>Latitude</th>
             <th>Longitude</th>
+            <th>Type</th>
             <th>Actif</th>
             <th>Créé le</th>
             <th>Actions</th>
@@ -29,6 +30,13 @@
             <td>{{ c.nom }}</td>
             <td>{{ c.latitude|default:'—' }}</td>
             <td>{{ c.longitude|default:'—' }}</td>
+            <td>
+              {% if c.type == 'TEMPORAIRE' %}
+                <span class="badge bg-warning text-dark">Temporaire</span>
+              {% else %}
+                <span class="badge bg-info text-dark">STBV</span>
+              {% endif %}
+            </td>
             <td>
               {% if c.actif %}
                 <span class="badge bg-success">Actif</span>
@@ -47,6 +55,7 @@
                 data-nom="{{ c.nom|escape }}"
                 data-lat="{{ c.latitude }}"
                 data-lng="{{ c.longitude }}"
+                data-type="{{ c.type }}"
                 data-actif="{{ c.actif|yesno:'1,0' }}">
                 <i class="fas fa-pen"></i>
               </button>
@@ -54,7 +63,7 @@
           </tr>
           {% empty %}
           <tr>
-            <td colspan="5" class="text-center text-muted">Aucun centre enregistré.</td>
+            <td colspan="6" class="text-center text-muted">Aucun centre enregistré.</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -89,6 +98,13 @@
               <input type="text" class="form-control" id="longitude" name="longitude" placeholder="ex: 1.2123">
             </div>
           </div>
+          <div class="mt-3">
+            <label for="type" class="form-label">Type</label>
+            <select class="form-select" id="type" name="type">
+              <option value="STBV">STBV</option>
+              <option value="TEMPORAIRE">Temporaire</option>
+            </select>
+          </div>
           <div class="form-check mt-3">
             <input class="form-check-input" type="checkbox" value="on" id="actif" name="actif">
             <label class="form-check-label" for="actif">Actif</label>
@@ -120,6 +136,7 @@
       const latInput = modalEl.querySelector('#latitude');
       const lngInput = modalEl.querySelector('#longitude');
       const actifInput = modalEl.querySelector('#actif');
+      const typeSelect = modalEl.querySelector('#type');
 
       if (mode === 'edit') {
         // Fill from data attributes
@@ -128,6 +145,7 @@
         const lat = button.getAttribute('data-lat') || '';
         const lng = button.getAttribute('data-lng') || '';
         const actif = (button.getAttribute('data-actif') === '1');
+        const typeVal = (button.getAttribute('data-type') || 'STBV').toUpperCase();
         title.textContent = 'Modifier un centre de vidange';
         submitBtn.textContent = 'Mettre à jour';
         idInput.value = id;
@@ -135,6 +153,7 @@
         latInput.value = lat;
         lngInput.value = lng;
         actifInput.checked = actif;
+        typeSelect.value = ['STBV','TEMPORAIRE'].includes(typeVal) ? typeVal : 'STBV';
       } else {
         title.textContent = 'Créer un centre de vidange';
         submitBtn.textContent = 'Créer';
@@ -143,6 +162,7 @@
         latInput.value = '';
         lngInput.value = '';
         actifInput.checked = false;
+        typeSelect.value = 'STBV';
       }
     });
   })();

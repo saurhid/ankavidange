@@ -153,10 +153,10 @@
                             </div>
                         </td>
                         <td>
-                            {% if request.camion %}
+                            {% if request.vidangeur.vidangeurmecanique %}
                             <span class="badge bg-light text-dark">
                                 <i class="fas fa-truck me-1"></i>
-                                {{ request.camion.immatriculation }}
+                                {{ request.vidangeur.vidangeurmecanique.immatriculation }}
                             </span>
                             {% else %}-
                             {% endif %}

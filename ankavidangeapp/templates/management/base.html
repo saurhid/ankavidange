@@ -70,9 +70,7 @@
         <div class="container">
             <a class="navbar-brand" href="{% url 'management:dashboard' %}">
                 <div class="d-flex align-items-center">
-                    <img src="{% static 'img/logo.png' %}" alt="Logo" class="logo">
                     <span class="fw-bold ms-2">AnKa Vidange</span>
-                    <small class="ms-2 text-white-50">Gestion</small>
                 </div>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -110,11 +108,25 @@
                             <i class="fas fa-money-bill me-1"></i> Tarifs
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'centres_list' %}active{% endif %}" 
-                           href="{% url 'management:centres_list' %}">
-                            <i class="fas fa-industry me-1"></i> Centres
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.resolver_match.url_name == 'centres_list' or request.resolver_match.url_name == 'stationnements_list' %}active{% endif %}"
+                           href="#" id="positionsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-location-dot me-1"></i> Positions
                         </a>
+                        <ul class="dropdown-menu" aria-labelledby="positionsDropdown">
+                            <li>
+                                <a class="dropdown-item {% if request.resolver_match.url_name == 'centres_list' %}active{% endif %}"
+                                   href="{% url 'management:centres_list' %}">
+                                    <i class="fas fa-industry me-2"></i> Centres
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item {% if request.resolver_match.url_name == 'stationnements_list' %}active{% endif %}"
+                                   href="{% url 'management:stationnements_list' %}">
+                                    <i class="fas fa-square-parking me-2"></i> Stationnements
+                                </a>
+                            </li>
+                        </ul>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'reports' %}active{% endif %}" 

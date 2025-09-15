@@ -29,6 +29,9 @@ urlpatterns = [
     # Centres de vidange
     path('centres/', views.CentreListView.as_view(), name='centres_list'),
     
+    # Stationnements
+    path('stationnements/', views.StationnementListView.as_view(), name='stationnements_list'),
+    
     # Request Follow-up
     path('requests/', views.RequestFollowUpView.as_view(), name='request_followup'),
     path('requests/<int:pk>/', views.RequestDetailView.as_view(), name='request_detail'),

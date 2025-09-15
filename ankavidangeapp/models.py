@@ -131,6 +131,11 @@ class Proprietaire(Profil):
 class CentreVidange(models.Model):
     nom = models.CharField(_('nom du centre'), max_length=255)
     position = gis_models.PointField(_('position géographique'), srid=4326, null=True, blank=True)
+    TYPE_CHOICES = [
+        ('STBV', 'STBV'),
+        ('TEMPORAIRE', 'Temporaire'),
+    ]
+    type = models.CharField(_('type de centre'), max_length=20, choices=TYPE_CHOICES, default='STBV')
     actif = models.BooleanField(_('actif'), default=False)
     date_creation = models.DateTimeField(_('date de création'), default=timezone.now)
 
@@ -175,6 +180,14 @@ class Vidangeur(models.Model):
     actif = models.BooleanField(_('actif'), default=True)
     date_creation = models.DateTimeField(_('date de création'), default=timezone.now)
     date_maj = models.DateTimeField(_('date de mise à jour'), auto_now=True)
+    stationnement = models.ForeignKey(
+        'Stationnement',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='vidangeurs',
+        verbose_name=_('stationnement')
+    )
 
     class Meta:
         verbose_name = _('vidangeur')
@@ -200,6 +213,14 @@ class Vidangeur(models.Model):
         self.date_derniere_localisation = timezone.now()
         self.save(update_fields=['position_actuelle', 'date_derniere_localisation'])
 
+    @property
+    def stationnement_latitude(self):
+        return self.stationnement.latitude if self.stationnement else None
+
+    @property
+    def stationnement_longitude(self):
+        return self.stationnement.longitude if self.stationnement else None
+
 class VidangeurMecanique(Vidangeur):
     proprietaire = models.ForeignKey(
         Proprietaire,
@@ -215,7 +236,6 @@ class VidangeurMecanique(Vidangeur):
     modele = models.CharField(_('modèle'), max_length=100, null=True, blank=True)
     annee = models.PositiveIntegerField(_('année de fabrication'), null=True, blank=True)
     capacite = models.PositiveIntegerField(_('capacité (en litres)'), null=True, blank=True)
-    stationnement = gis_models.PointField(_('position géographique'), srid=4326, null=True, blank=True)
 
     centres = models.ManyToManyField(
         'CentreVidange',
@@ -610,3 +630,12 @@ class Device(models.Model):
 
     def __str__(self):
         return f"{self.platform} - {self.user.phone_number}"
+
+class Stationnement(models.Model):
+    nom = models.CharField(_('nom du stationnement'), max_length=255)
+    position = gis_models.PointField(_('position géographique'), srid=4326, null=True, blank=True)
+    latitude = models.FloatField(_('latitude'), null=True, blank=True)
+    longitude = models.FloatField(_('longitude'), null=True, blank=True)
+
+    def __str__(self):
+        return f"Stationnement à {self.position}"

@@ -1,0 +1,93 @@
+{% extends 'management/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h1 class="h3 mb-0 text-gray-800">{{ title|default:'Stationnements' }}</h1>
+  <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createStationnementModal">
+    <i class="fas fa-plus me-1"></i> Nouveau stationnement
+  </button>
+</div>
+
+<div class="card shadow">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead>
+          <tr>
+            <th>Nom</th>
+            <th>Latitude</th>
+            <th>Longitude</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in stationnements %}
+          <tr>
+            <td>{{ s.nom }}</td>
+            <td>{{ s.latitude|default:'—' }}</td>
+            <td>{{ s.longitude|default:'—' }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="3" class="text-center text-muted">Aucun stationnement enregistré.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if is_paginated %}
+      <nav aria-label="Pagination">
+        <ul class="pagination justify-content-end mb-0">
+          {% if page_obj.has_previous %}
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">Précédent</a></li>
+          {% else %}
+            <li class="page-item disabled"><span class="page-link">Précédent</span></li>
+          {% endif %}
+          <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span></li>
+          {% if page_obj.has_next %}
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">Suivant</a></li>
+          {% else %}
+            <li class="page-item disabled"><span class="page-link">Suivant</span></li>
+          {% endif %}
+        </ul>
+      </nav>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Create Stationnement Modal -->
+<div class="modal fade" id="createStationnementModal" tabindex="-1" aria-labelledby="createStationnementLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="createStationnementLabel">Créer un stationnement</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post" action="{% url 'management:stationnements_list' %}">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="nom" class="form-label">Nom du stationnement</label>
+            <input type="text" class="form-control" id="nom" name="nom" required>
+          </div>
+          <div class="row g-2">
+            <div class="col">
+              <label for="latitude" class="form-label">Latitude</label>
+              <input type="text" class="form-control" id="latitude" name="latitude" placeholder="ex: 6.1373">
+            </div>
+            <div class="col">
+              <label for="longitude" class="form-label">Longitude</label>
+              <input type="text" class="form-control" id="longitude" name="longitude" placeholder="ex: 1.2123">
+            </div>
+          </div>
+          <div class="form-text mt-2">Les coordonnées sont optionnelles. Vous pourrez les définir plus tard.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Créer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

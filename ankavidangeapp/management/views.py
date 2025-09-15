@@ -13,7 +13,7 @@ from django.contrib.auth import authenticate, login as auth_login, logout
 from django.views.generic.edit import FormView, DeleteView
 from django import forms
 from django.contrib.gis.geos import Point
-from ..models import Vidangeur, VidangeurMecanique, VidangeurManuel, PositionGPS, Demande, User, Proprietaire, CentreVidange, TarifCentreVidange
+from ..models import Vidangeur, VidangeurMecanique, VidangeurManuel, PositionGPS, Demande, User, Proprietaire, CentreVidange, TarifCentreVidange, Stationnement
 
 class LoginView(TemplateView):
     template_name = 'management/login.html'
@@ -98,12 +98,21 @@ class DashboardView(StaffRequiredMixin, TemplateView):
                 # Determine subtype
                 vm = VidangeurMecanique.objects.filter(pk=v.pk).first()
                 vman = None if vm else VidangeurManuel.objects.filter(pk=v.pk).first()
+                # Map raw status code to a color class used by the frontend
+                status_color_map = {
+                    'DISPONIBLE': 'green',
+                    'EN_MISSION': 'orange',
+                    'INDISPONIBLE': 'red',
+                }
+                color_class = status_color_map.get(v.statut, 'blue')
                 trucks.append({
                     'id': v.id,
                     'type': 'Mécanique' if vm else 'Manuelle',
                     'immatriculation': getattr(vm, 'immatriculation', None),
                     'modele': getattr(vm, 'modele', None),
                     'statut': v.get_statut_display() if hasattr(v, 'get_statut_display') else v.statut,
+                    'statut_code': v.statut,
+                    'statut_color': color_class,
                     'latitude': latest_position.latitude,
                     'longitude': latest_position.longitude,
                     'last_update': latest_position.timestamp,
@@ -144,12 +153,21 @@ class TruckMapView(StaffRequiredMixin, TemplateView):
             if latest_position:
                 vm = VidangeurMecanique.objects.filter(pk=v.pk).first()
                 vman = None if vm else VidangeurManuel.objects.filter(pk=v.pk).first()
+                # Map raw status code to a color class used by the frontend
+                status_color_map = {
+                    'DISPONIBLE': 'green',
+                    'EN_MISSION': 'orange',
+                    'INDISPONIBLE': 'red',
+                }
+                color_class = status_color_map.get(v.statut, 'blue')
                 trucks.append({
                     'id': v.id,
                     'type': 'Mécanique' if vm else 'Manuelle',
                     'immatriculation': getattr(vm, 'immatriculation', None),
                     'modele': getattr(vm, 'modele', None),
                     'statut': v.get_statut_display() if hasattr(v, 'get_statut_display') else v.statut,
+                    'statut_code': v.statut,
+                    'statut_color': color_class,
                     'latitude': latest_position.latitude,
                     'longitude': latest_position.longitude,
                     'last_update': latest_position.timestamp,
@@ -172,10 +190,31 @@ class TruckMapView(StaffRequiredMixin, TemplateView):
                 'longitude': lng,
             })
         
+        # Stationnements avec coordonnées (utilise latitude/longitude ou Point si présent)
+        stationnements = []
+        for s in Stationnement.objects.all():
+            lat = None
+            lng = None
+            # Prefer explicit lat/lng fields; fallback to Point
+            if s.latitude is not None and s.longitude is not None:
+                lat, lng = s.latitude, s.longitude
+            elif getattr(s, 'position', None):
+                lat = getattr(s.position, 'y', None)
+                lng = getattr(s.position, 'x', None)
+            if lat is None or lng is None:
+                continue
+            stationnements.append({
+                'id': s.id,
+                'name': s.nom,
+                'latitude': lat,
+                'longitude': lng,
+            })
+        
         context.update({
             'title': 'Suivi des camions en temps réel',
             'trucks': trucks,
             'centres': centres,
+            'stationnements': stationnements,
         })
         return context
 
@@ -335,8 +374,10 @@ class UserCreateForm(forms.ModelForm):
     annee = forms.IntegerField(label='Année', required=False)
     capacite = forms.IntegerField(label='Capacité (L)', required=False)
     tarif_manuel = forms.DecimalField(label='Tarif (FCFA) — Vidangeur manuel', max_digits=10, decimal_places=2, min_value=0, required=False)
-    stationnement_lat = forms.DecimalField(label='Stationnement Latitude', required=False)
-    stationnement_lng = forms.DecimalField(label='Stationnement Longitude', required=False)
+    stationnement = forms.ModelChoiceField(
+        label='Stationnement', required=False,
+        queryset=Stationnement.objects.all().order_by('nom')
+    )
 
     class Meta:
         model = User
@@ -359,10 +400,6 @@ class UserCreateForm(forms.ModelForm):
                     raise forms.ValidationError(f"{f.replace('_',' ').title()} est requis pour un Vidangeur (Mécanique).")
         if role == User.Role.VIDANGEUR_MAN and cleaned.get('tarif_manuel') is None:
             raise forms.ValidationError('Tarif (manuel) est requis pour un Vidangeur (Manuelle).')
-        # Stationnement: require both coords or none
-        lat, lng = cleaned.get('stationnement_lat'), cleaned.get('stationnement_lng')
-        if (lat and not lng) or (lng and not lat):
-            raise forms.ValidationError('Fournissez à la fois Latitude et Longitude pour le stationnement, ou laissez les deux vides.')
         return cleaned
 
     def save(self, commit=True):
@@ -371,7 +408,7 @@ class UserCreateForm(forms.ModelForm):
         cleaned.pop('password2', None)
         # Extra fields
         extra_owner = {k: cleaned.pop(k, None) for k in ['nom_societe', 'contact', 'type', 'numero_agrement']}
-        extra_v_fields = {k: cleaned.pop(k, None) for k in ['proprietaire', 'numero_permis', 'immatriculation', 'marque', 'modele', 'annee', 'capacite', 'tarif_manuel', 'stationnement_lat', 'stationnement_lng']}
+        extra_v_fields = {k: cleaned.pop(k, None) for k in ['proprietaire', 'numero_permis', 'immatriculation', 'marque', 'modele', 'annee', 'capacite', 'tarif_manuel', 'stationnement']}
         # Create user via manager
         user = User.objects.create_user(phone_number=cleaned['phone_number'], password=password, **{k: cleaned[k] for k in ['first_name','last_name','email','role','is_active','is_staff']})
         # Create appropriate profile
@@ -394,22 +431,29 @@ class UserCreateForm(forms.ModelForm):
                 annee=extra_v_fields.get('annee') or None,
                 capacite=extra_v_fields.get('capacite') or None,
             )
-            # Set stationnement on base vidangeur
-            lat, lng = extra_v_fields.get('stationnement_lat'), extra_v_fields.get('stationnement_lng')
-            if lat is not None and lng is not None:
-                v = Vidangeur.objects.get(user=user)
-                v.stationnement = Point(float(lng), float(lat))
-                v.save(update_fields=['stationnement'])
+            # Set stationnement FK on base Vidangeur
+            st = extra_v_fields.get('stationnement')
+            if st:
+                vm = VidangeurMecanique.objects.filter(user=user).first()
+                if vm:
+                    base = Vidangeur.objects.filter(pk=vm.pk).first()
+                    if base:
+                        base.stationnement = st
+                        base.save(update_fields=['stationnement'])
         elif user.role == User.Role.VIDANGEUR_MAN:
             VidangeurManuel.objects.create(
                 user=user,
                 tarif_manuel=extra_v_fields.get('tarif_manuel')
             )
-            lat, lng = extra_v_fields.get('stationnement_lat'), extra_v_fields.get('stationnement_lng')
-            if lat is not None and lng is not None:
-                v = Vidangeur.objects.get(user=user)
-                v.stationnement = Point(float(lng), float(lat))
-                v.save(update_fields=['stationnement'])
+            # Optionally set stationnement FK for vidangeur manuel too
+            st = extra_v_fields.get('stationnement')
+            if st:
+                vman = VidangeurManuel.objects.filter(user=user).first()
+                if vman:
+                    base = Vidangeur.objects.filter(pk=vman.pk).first()
+                    if base:
+                        base.stationnement = st
+                        base.save(update_fields=['stationnement'])
         return user
 
 class UserUpdateForm(forms.ModelForm):
@@ -436,8 +480,10 @@ class UserUpdateForm(forms.ModelForm):
     annee = forms.IntegerField(label='Année', required=False)
     capacite = forms.IntegerField(label='Capacité (L)', required=False)
     tarif_manuel = forms.DecimalField(label='Tarif (FCFA) — Vidangeur manuel', max_digits=10, decimal_places=2, min_value=0, required=False)
-    stationnement_lat = forms.DecimalField(label='Stationnement Latitude', required=False)
-    stationnement_lng = forms.DecimalField(label='Stationnement Longitude', required=False)
+    stationnement = forms.ModelChoiceField(
+        label='Stationnement', required=False,
+        queryset=Stationnement.objects.all().order_by('nom')
+    )
 
     class Meta:
         model = User
@@ -467,14 +513,10 @@ class UserUpdateForm(forms.ModelForm):
             vman = VidangeurManuel.objects.filter(user=user).first()
             if vman:
                 self.fields['tarif_manuel'].initial = vman.tarif_manuel
-        # Prefill stationnement from base vidangeur
-        v_base = Vidangeur.objects.filter(user=user).first()
-        if v_base and v_base.stationnement:
-            try:
-                self.fields['stationnement_lat'].initial = v_base.stationnement.y
-                self.fields['stationnement_lng'].initial = v_base.stationnement.x
-            except Exception:
-                pass
+        # Prefill stationnement from base Vidangeur
+        base = Vidangeur.objects.filter(pk=user.id).first()
+        if base and base.stationnement_id:
+            self.fields['stationnement'].initial = base.stationnement_id
 
     def clean(self):
         cleaned = super().clean()
@@ -494,10 +536,6 @@ class UserUpdateForm(forms.ModelForm):
         elif role == User.Role.VIDANGEUR_MAN:
             if cleaned.get('tarif_manuel') is None:
                 raise forms.ValidationError('Tarif (manuel) est requis pour un Vidangeur (Manuelle).')
-        # Stationnement: require both or none
-        lat, lng = cleaned.get('stationnement_lat'), cleaned.get('stationnement_lng')
-        if (lat and not lng) or (lng and not lat):
-            raise forms.ValidationError('Fournissez à la fois Latitude et Longitude pour le stationnement, ou laissez les deux vides.')
         return cleaned
 
     def save(self, commit=True):
@@ -548,12 +586,12 @@ class UserUpdateForm(forms.ModelForm):
                 vm.capacite = cleaned.get('capacite') or None
                 vm.full_clean()
                 vm.save()
-            # Update stationnement on base vidangeur
-            lat, lng = cleaned.get('stationnement_lat'), cleaned.get('stationnement_lng')
-            v = Vidangeur.objects.filter(user=user).first()
-            if v and lat is not None and lng is not None:
-                v.stationnement = Point(float(lng), float(lat))
-                v.save(update_fields=['stationnement'])
+            # Update stationnement FK on base Vidangeur
+            st = cleaned.get('stationnement')
+            base = Vidangeur.objects.filter(pk=vm.pk).first()
+            if base:
+                base.stationnement = st
+                base.save(update_fields=['stationnement'])
         elif user.role == User.Role.VIDANGEUR_MAN:
             # Remove mechanical subclass if exists
             VidangeurMecanique.objects.filter(user=user).delete()
@@ -564,12 +602,12 @@ class UserUpdateForm(forms.ModelForm):
                 vman.tarif_manuel = cleaned.get('tarif_manuel')
                 vman.full_clean()
                 vman.save(update_fields=['tarif_manuel'])
-            # Update stationnement on base vidangeur
-            lat, lng = cleaned.get('stationnement_lat'), cleaned.get('stationnement_lng')
-            v = Vidangeur.objects.filter(user=user).first()
-            if v and lat is not None and lng is not None:
-                v.stationnement = Point(float(lng), float(lat))
-                v.save(update_fields=['stationnement'])
+            # Update stationnement FK on base Vidangeur for manual too
+            st = cleaned.get('stationnement')
+            base = Vidangeur.objects.filter(pk=user.pk).first()
+            if base:
+                base.stationnement = st
+                base.save(update_fields=['stationnement'])
         return user
 
 class UserCreateView(StaffRequiredMixin, FormView):
@@ -750,6 +788,9 @@ class CentreListView(StaffRequiredMixin, TemplateView):
         lat = (request.POST.get('latitude') or '').strip()
         lng = (request.POST.get('longitude') or '').strip()
         actif = True if request.POST.get('actif') == 'on' else False
+        type_val = (request.POST.get('type') or 'STBV').strip().upper()
+        if type_val not in {'STBV', 'TEMPORAIRE'}:
+            type_val = 'STBV'
 
         if not nom:
             messages.error(request, "Le nom du centre est requis.")
@@ -760,6 +801,7 @@ class CentreListView(StaffRequiredMixin, TemplateView):
             centre = get_object_or_404(CentreVidange, pk=centre_id)
             centre.nom = nom
             centre.actif = actif
+            centre.type = type_val
             if lat and lng:
                 try:
                     centre.position = Point(float(lng), float(lat))
@@ -769,7 +811,7 @@ class CentreListView(StaffRequiredMixin, TemplateView):
             messages.success(request, "Centre mis à jour avec succès.")
         else:
             # Create new
-            centre = CentreVidange(nom=nom, actif=actif)
+            centre = CentreVidange(nom=nom, actif=actif, type=type_val)
             if lat and lng:
                 try:
                     centre.position = Point(float(lng), float(lat))
@@ -778,3 +820,42 @@ class CentreListView(StaffRequiredMixin, TemplateView):
             centre.save()
             messages.success(request, "Centre créé avec succès.")
         return redirect('management:centres_list')
+
+class StationnementListView(StaffRequiredMixin, ListView):
+    model = Stationnement
+    template_name = 'management/stationnements_list.html'
+    context_object_name = 'stationnements'
+    paginate_by = 25
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        return qs.order_by('nom')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = 'Stationnements'
+        return context
+
+    def post(self, request, *args, **kwargs):
+        # Create a new stationnement
+        nom = (request.POST.get('nom') or '').strip()
+        lat_raw = (request.POST.get('latitude') or '').strip()
+        lng_raw = (request.POST.get('longitude') or '').strip()
+
+        if not nom:
+            messages.error(request, "Le nom du stationnement est requis.")
+            return redirect('management:stationnements_list')
+
+        s = Stationnement(nom=nom)
+        if lat_raw and lng_raw:
+            try:
+                lat = float(lat_raw)
+                lng = float(lng_raw)
+                s.latitude = lat
+                s.longitude = lng
+                s.position = Point(lng, lat)
+            except ValueError:
+                messages.error(request, "Coordonnées invalides. Le stationnement a été créé sans position.")
+        s.save()
+        messages.success(request, "Stationnement créé avec succès.")
+        return redirect('management:stationnements_list')

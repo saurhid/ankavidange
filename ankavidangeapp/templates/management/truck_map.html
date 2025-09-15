@@ -21,6 +21,11 @@
         <div class="card mb-4">
             <div class="card-body">
                 <div id="CamMap3" style="height: 425px; width: 100%;"></div>
+                <div class="map-legend mt-2" style="position: absolute; bottom: 16px; right: 16px; background: #fff; padding: 8px 12px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.15);">
+                    <div style="display:flex;align-items:center;gap:8px; margin-bottom:4px;"><span class="map-marker green" style="width:14px;height:14px;border:0;"></span><small>Disponible</small></div>
+                    <div style="display:flex;align-items:center;gap:8px; margin-bottom:4px;"><span class="map-marker orange" style="width:14px;height:14px;border:0;"></span><small>En mission</small></div>
+                    <div style="display:flex;align-items:center;gap:8px;"><span class="map-marker red" style="width:14px;height:14px;border:0;"></span><small>Indisponible</small></div>
+                </div>
             </div>
         </div>
     </div>
@@ -123,6 +128,7 @@
     .map-marker.blue { background: #0d6efd; }
     .map-marker.orange { background: #fd7e14; }
     .map-marker.green { background: #198754; }
+    .map-marker.red { background: #e74c3c; }
     .map-marker i { font-size: 14px; line-height: 1; }
 </style>
 {% endblock %}
@@ -135,6 +141,7 @@
 
 {{ trucks|json_script:"trucks-data" }}
 {{ centres|json_script:"centres-data" }}
+{{ stationnements|json_script:"stationnements-data" }}
 
 <script>
   // Initialize map
@@ -148,23 +155,35 @@
 
   const trucks = JSON.parse(document.getElementById('trucks-data').textContent);
   const centres = JSON.parse(document.getElementById('centres-data')?.textContent || '[]');
+  const stationnements = JSON.parse(document.getElementById('stationnements-data')?.textContent || '[]');
   const markersById = {};
   const bounds = [];
 
-  function normalizeType(type) {
-    return (type || '')
+  function normalizeStr(s) {
+    return (s || '')
       .toString()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase();
   }
-  function isMec(type) { return normalizeType(type).startsWith('mecanique'); }
-  function colorClass(type) { return isMec(type) ? 'blue' : 'orange'; }
-  function iconForType(type) {
+  function isMec(type) { return normalizeStr(type).startsWith('mecanique'); }
+
+  // Map status (display string or code) to a color class
+  function statusClass(statut) {
+    const raw = (statut || '').toString();
+    // Normalize: lowercase, strip accents, replace underscores with spaces
+    const s = normalizeStr(raw).replace(/_/g, ' ').trim();
+    if (s.includes('disponible') || s === 'disponible') return 'green';
+    if (s.includes('en mission') || s === 'en mission' || s.includes('mission')) return 'orange';
+    if (s.includes('indisponible') || s === 'indisponible' || s.includes('unavailable')) return 'red';
+    return 'blue';
+  }
+
+  // Keep icon by type, color by status
+  function iconFor(type, statut, colorOverride) {
     const mec = isMec(type);
-    // Add FA5 fallback class for manual (fa-tools) alongside FA6 (fa-screwdriver-wrench)
     const iconClass = mec ? 'fa-solid fa-truck' : 'fa-solid fa-screwdriver-wrench fa-tools';
-    const cc = colorClass(type);
+    const cc = colorOverride || statusClass(statut);
     return L.divIcon({
       className: 'fa-marker',
       html: `<div class="map-marker ${cc}"><i class="${iconClass}"></i></div>`,
@@ -178,6 +197,15 @@
     return L.divIcon({
       className: 'fa-marker',
       html: `<div class="map-marker green"><i class="fa-solid fa-industry"></i></div>`,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+      popupAnchor: [0, -14]
+    });
+  }
+  function stationnementIcon() {
+    return L.divIcon({
+      className: 'fa-marker',
+      html: `<div class="map-marker" style="background:#6c757d"><i class="fa-solid fa-square-parking"></i></div>`,
       iconSize: [28, 28],
       iconAnchor: [14, 14],
       popupAnchor: [0, -14]
@@ -199,14 +227,17 @@
     return `${diffD} j`;
   }
 
-  // Plot truck markers
+  // Plot truck markers (color by status)
   trucks.forEach(function(t) {
     if (t.latitude && t.longitude) {
-      const marker = L.marker([t.latitude, t.longitude], { icon: iconForType(t.type) }).addTo(map);
+      const statusForColor = (t.statut_code || t.statut);
+      const colorClass = t.statut_color || statusClass(statusForColor);
+      try { console.debug('Truck status mapping', { id: t.id, statut: t.statut, code: t.statut_code, colorClass }); } catch(e) {}
+      const marker = L.marker([t.latitude, t.longitude], { icon: iconFor(t.type, statusForColor, colorClass) }).addTo(map);
       const popupHtml = `
         <div class="truck-popup">
           <h5>#${t.id} — ${t.type || '-'}${t.immatriculation ? ' — ' + t.immatriculation : ''}</h5>
-          <p><strong>Statut:</strong> ${t.statut}</p>
+          <p><strong>Statut:</strong> ${t.statut} (${t.statut_code || ''})</p>
           <p><strong>Chauffeur:</strong> ${t.chauffeur || '-'}</p>
           <p><strong>Coord:</strong> ${Number(t.latitude).toFixed(6)}, ${Number(t.longitude).toFixed(6)}</p>
           <p><strong>MAJ:</strong> ${formatTimeAgo((t.last_update_ts ? (t.last_update_ts * 1000) : t.last_update_iso))}</p>
@@ -228,6 +259,20 @@
         </div>`;
       marker.bindPopup(popupHtml);
       bounds.push([c.latitude, c.longitude]);
+    }
+  });
+
+  // Plot stationnement markers
+  stationnements.forEach(function(s) {
+    if (s.latitude && s.longitude) {
+      const marker = L.marker([s.latitude, s.longitude], { icon: stationnementIcon() }).addTo(map);
+      const popupHtml = `
+        <div class="truck-popup">
+          <h5>Stationnement: ${s.name || '-'}</h5>
+          <p><strong>Coord:</strong> ${Number(s.latitude).toFixed(6)}, ${Number(s.longitude).toFixed(6)}</p>
+        </div>`;
+      marker.bindPopup(popupHtml);
+      bounds.push([s.latitude, s.longitude]);
     }
   });
 

@@ -17,8 +17,10 @@ from django.db.models import Min
 from django.views import View
 import json
 
-from .models import PositionGPS, Vidangeur, Demande, Notification, User, VidangeurMecanique, VidangeurManuel
+from .models import PositionGPS, Vidangeur, Demande, Notification, User, VidangeurMecanique, VidangeurManuel, Signalisation
 from .api.views import send_fcm_to_user
+from urllib.parse import quote
+from django.db.models.functions import Coalesce, TruncDate
 
 class ProprietaireRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
     login_url = 'ankavidangeapp:auth:login'
@@ -139,14 +141,17 @@ class ProprietaireDashboardView(ProprietaireRequiredMixin, TemplateView):
         # Revenus des 30 derniers jours (sommes budgets des demandes terminées)
         now = timezone.now()
         since = now - timedelta(days=30)
-        revenus = (Demande.objects
-                  .filter(
-                      vidangeur__vidangeurmecanique__proprietaire__user=user,
-                      statut='TERMINEE',
-                      date_fin__gte=since,
-                      date_fin__lte=now,
-                  )
-                  .aggregate(total=Sum('budget'))['total'] or 0)
+        # Use same robust logic as the report: fallback date when date_fin_intervention is null
+        revenus_qs = (
+            Demande.objects
+            .filter(
+                vidangeur__vidangeurmecanique__proprietaire__user=user,
+                statut='TERMINEE',
+            )
+            .annotate(finish_date=Coalesce(TruncDate('date_fin_intervention'), TruncDate('date_creation')))
+            .filter(finish_date__gte=since.date(), finish_date__lte=now.date())
+        )
+        revenus = revenus_qs.aggregate(total=Sum('budget'))['total'] or 0
         context['revenus_mois'] = float(revenus)
 
         # Dernières demandes (adapter aux champs utilisés par le template)
@@ -239,10 +244,12 @@ class LandingPageView(LoginRequiredMixin, TemplateView):
         locs_mec = (
             vm_qs_mec.select_related('user')
                  .exclude(position_actuelle__isnull=True)
+                 .exclude(statut='INDISPONIBLE')
         )
         locs_man = (
             vm_qs_man.select_related('user')
                  .exclude(position_actuelle__isnull=True)
+                 .exclude(statut='INDISPONIBLE')
         )
 
         context['vidangeurs_geo_user'] = [
@@ -488,7 +495,7 @@ class ProprietaireDemandeEditView(ProprietaireRequiredMixin, TemplateView):
         return context
 
 class ProprietaireVidangeursListView(LoginRequiredMixin, TemplateView):
-    template_name = 'proprietaire/vidangeurs_list.html'
+    template_name = 'proprietaire/vidangeur_list.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -516,6 +523,123 @@ class ProprietaireVidangeursListView(LoginRequiredMixin, TemplateView):
         ]
 
         return context
+
+class ProprietaireRapportCAView(ProprietaireRequiredMixin, TemplateView):
+    template_name = 'proprietaire/rapport_ca.html'
+
+    def get_context_data(self, **kwargs):
+        from django.utils.dateparse import parse_date
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+
+        # Date range: defaults to last 30 days
+        today = timezone.now().date()
+        start_str = self.request.GET.get('start')
+        end_str = self.request.GET.get('end')
+        start_date = parse_date(start_str) if start_str else (today - timedelta(days=30))
+        end_date = parse_date(end_str) if end_str else today
+
+        # Ensure proper ordering and not None
+        if not start_date:
+            start_date = today - timedelta(days=30)
+        if not end_date:
+            end_date = today
+        if start_date > end_date:
+            start_date, end_date = end_date, start_date
+
+        # Base queryset: demandes terminées des vidangeurs du propriétaire
+        base_qs = (Demande.objects
+                  .filter(
+                      vidangeur__vidangeurmecanique__proprietaire__user=user,
+                      statut='TERMINEE',
+                  ))
+
+        # Annotate a finish_date = date_fin_intervention (date only) OR fallback to date_creation (date only)
+        qs = (base_qs
+              .annotate(
+                  finish_date=Coalesce(TruncDate('date_fin_intervention'), TruncDate('date_creation'))
+              )
+              .filter(finish_date__gte=start_date, finish_date__lte=end_date)
+        )
+
+        # Total CA
+        total_ca = qs.aggregate(total=Sum('budget'))['total'] or 0
+
+        # Aggregation journalière (by finish_date)
+        per_day = (qs.values('finish_date')
+                     .annotate(total=Sum('budget'))
+                     .order_by('finish_date'))
+
+        # Normalize to continuous date range for chart
+        labels = []
+        data = []
+        d = start_date
+        day_totals = {row['finish_date']: float(row['total'] or 0) for row in per_day}
+        while d <= end_date:
+            labels.append(d.strftime('%d/%m'))
+            data.append(day_totals.get(d, 0.0))
+            d += timedelta(days=1)
+
+        context.update({
+            'start_date': start_date,
+            'end_date': end_date,
+            'total_ca': float(total_ca),
+            'chart': {
+                'labels': labels,
+                'data': data,
+            },
+            'rows': per_day,
+        })
+        return context
+
+# Signalisation form
+class SignalisationForm(forms.ModelForm):
+    class Meta:
+        model = Signalisation
+        fields = [
+            'type_signalement',
+            'description',
+            'immatriculation',
+            'localisation',
+            'signalant_telephone',
+            'signalant_nom',
+        ]
+        labels = {
+            'type_signalement': 'Type de signalement',
+            'description': 'Description',
+            'immatriculation': 'Immatriculation du véhicule',
+            'localisation': 'Lieu',
+            'signalant_telephone': 'Votre téléphone',
+            'signalant_nom': 'Votre nom (optionnel)',
+        }
+        widgets = {
+            'type_signalement': forms.Select(attrs={'class': 'form-select'}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': "Décrivez le problème..."}),
+            'immatriculation': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex: AB-1234-CD'}),
+            'localisation': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Lieu / adresse'}),
+            'signalant_telephone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex: 07 12 34 56 78'}),
+            'signalant_nom': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Votre nom'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Ensure all widgets have Bootstrap classes even if overridden elsewhere
+        for name, field in self.fields.items():
+            css = field.widget.attrs.get('class', '')
+            if isinstance(field.widget, forms.Select):
+                field.widget.attrs['class'] = f"form-select {css}".strip()
+            else:
+                field.widget.attrs['class'] = f"form-control {css}".strip()
+
+class SignalisationCreateView(CreateView):
+    model = Signalisation
+    form_class = SignalisationForm
+    template_name = 'registrations/signalisation.html'
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        success_msg = "Merci. Votre signalement a été enregistré."
+        return redirect(f"{reverse('ankavidangeapp:auth:login')}?success={quote(success_msg)}")
 
 class RootRedirectView(View):
     def get(self, request, *args, **kwargs):

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AnkaVidange - Signalisation</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #FF9F00; }
+        .auth-container {
+            width: 90%;
+            max-width: 720px;
+            min-height: 200px;
+            padding: 32px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.15);
+            position: absolute;
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+        }
+        @media (min-width: 768px) {
+            .auth-container { width: 80%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="auth-container">
+            <h1 class="text-center mb-2" style="color: #FF9F00; font-family: cursive;">AnkaVidange</h1>
+            <h5 class="text-center mb-4">Formulaire de signalisation</h5>
+
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+            {% endif %}
+
+            <form method="post" novalidate>
+                {% csrf_token %}
+
+                <div class="mb-3">
+                    <label class="form-label" for="id_type_signalement">
+                        {{ form.type_signalement.label }}{% if form.type_signalement.field.required %} <span class="text-danger">*</span>{% endif %}
+                    </label>
+                    {{ form.type_signalement }}
+                    {% if form.type_signalement.errors %}
+                        <div class="invalid-feedback d-block">{{ form.type_signalement.errors|striptags }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label" for="id_immatriculation">
+                                {{ form.immatriculation.label }}{% if form.immatriculation.field.required %} <span class="text-danger">*</span>{% endif %}
+                            </label>
+                            {{ form.immatriculation }}
+                            {% if form.immatriculation.errors %}
+                                <div class="invalid-feedback d-block">{{ form.immatriculation.errors|striptags }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label" for="id_signalant_telephone">
+                                {{ form.signalant_telephone.label }}{% if form.signalant_telephone.field.required %} <span class="text-danger">*</span>{% endif %}
+                            </label>
+                            {{ form.signalant_telephone }}
+                            {% if form.signalant_telephone.errors %}
+                                <div class="invalid-feedback d-block">{{ form.signalant_telephone.errors|striptags }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label" for="id_signalant_nom">
+                                {{ form.signalant_nom.label }}{% if form.signalant_nom.field.required %} <span class="text-danger">*</span>{% endif %}
+                            </label>
+                            {{ form.signalant_nom }}
+                            {% if form.signalant_nom.errors %}
+                                <div class="invalid-feedback d-block">{{ form.signalant_nom.errors|striptags }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label" for="id_localisation">
+                                {{ form.localisation.label }}{% if form.localisation.field.required %} <span class="text-danger">*</span>{% endif %}
+                            </label>
+                            {{ form.localisation }}
+                            {% if form.localisation.errors %}
+                                <div class="invalid-feedback d-block">{{ form.localisation.errors|striptags }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="id_description">
+                        {{ form.description.label }}{% if form.description.field.required %} <span class="text-danger">*</span>{% endif %}
+                    </label>
+                    {{ form.description }}
+                    {% if form.description.errors %}
+                        <div class="invalid-feedback d-block">{{ form.description.errors|striptags }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="d-flex gap-2 mt-2">
+                    <button type="submit" class="btn btn-primary" style="background-color:#FF9F00; border:none;">Envoyer</button>
+                    <a class="btn btn-outline-secondary" href="{% url 'ankavidangeapp:auth:login' %}">Retour</a>
+                </div>
+            </form>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

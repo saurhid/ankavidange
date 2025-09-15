@@ -9,6 +9,8 @@ from .views import (
     ProprietaireDemandesListView, ProprietaireDemandeDetailView, ProprietaireDemandeEditView,
     ProprietaireVidangeursListView,
     RootRedirectView,
+    SignalisationCreateView,
+    ProprietaireRapportCAView,
 )
 
 # Application namespace
@@ -29,12 +31,16 @@ urlpatterns = [
     # Page d'accueil
     path('landing/', LandingPageView.as_view(), name='landing'),
     
+    # Formulaire de signalisation (public)
+    path('signalisation/', SignalisationCreateView.as_view(), name='signalisation'),
+    
     # Tableau de bord propriétaire
     path('proprietaire/', ProprietaireDashboardView.as_view(), name='proprietaire_dashboard'),
     path('proprietaire/vidangeurs/', ProprietaireVidangeursListView.as_view(), name='proprietaire_vidangeurs'),
     path('proprietaire/demandes/', ProprietaireDemandesListView.as_view(), name='proprietaire_demandes'),
     path('proprietaire/demandes/<int:pk>/', ProprietaireDemandeDetailView.as_view(), name='proprietaire_demande_detail'),
     path('proprietaire/demandes/<int:pk>/edit/', ProprietaireDemandeEditView.as_view(), name='proprietaire_demande_edit'),
+    path('proprietaire/rapport/ca/', ProprietaireRapportCAView.as_view(), name='proprietaire_rapport_ca'),
 
     # Endpoints web (session-based) pour la recherche et création de demande
     path('web/vidangeurs/search/', search_vidangeurs, name='web_vidangeurs_search'),

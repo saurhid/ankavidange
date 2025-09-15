@@ -22,6 +22,7 @@ urlpatterns = [
     # FCM endpoints
     path('fcm/register/', views.FCMRegisterView.as_view(), name='fcm_register'),
     path('fcm/unregister/', views.FCMUnregisterView.as_view(), name='fcm_unregister'),
+    path('fcm/devices/', views.DeviceListView.as_view(), name='fcm_devices'),
     path('notifications/test/', views.FCMTestView.as_view(), name='notifications_test'),
     # Demands endpoints
     path('demands/accepted/', views.AcceptedDemandsView.as_view(), name='accepted_demands'),
