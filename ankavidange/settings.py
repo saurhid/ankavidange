@@ -184,6 +184,13 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Firebase Admin credentials path for FCM (used by ankavidangeapp.api.views lazy init)
+# Override via environment variable FIREBASE_CREDENTIALS_PATH when deploying.
+FIREBASE_CREDENTIALS_PATH = os.getenv(
+    'FIREBASE_CREDENTIALS_PATH',
+    os.path.join(BASE_DIR, 'ankavidange-fb4d0e7f6a74.json')
+)
+
 if os.name == 'nt':
     import os
     OSGEO4W = r"C:/OSGeo4W"

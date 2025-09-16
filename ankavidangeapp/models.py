@@ -123,6 +123,11 @@ class Proprietaire(Profil):
         verbose_name = _('propriétaire')
         verbose_name_plural = _('propriétaires')
 
+    def __str__(self):
+        # Display only the owner's name in selects and admin
+        full_name = self.user.get_full_name()
+        return full_name if full_name.strip() else self.user.phone_number
+
     def save(self, *args, **kwargs):
         if not self.user.role == User.Role.PROPRIETAIRE:
             raise ValueError("Le rôle de l'utilisateur doit être 'PROPRIETAIRE'")
@@ -638,4 +643,5 @@ class Stationnement(models.Model):
     longitude = models.FloatField(_('longitude'), null=True, blank=True)
 
     def __str__(self):
-        return f"Stationnement à {self.position}"
+        # Display only the station name in selects and admin
+        return self.nom
